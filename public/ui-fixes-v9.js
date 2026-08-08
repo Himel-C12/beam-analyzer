@@ -1,32 +1,62 @@
-/* Beam Analyzer v9 — complete diagram value toggle + CW moment label spacing. */
+/* Beam Analyzer v10 — diagram value toggle, feature toggle, and CW spacing. */
 (function(){
   const $=s=>document.querySelector(s);
+  const root=document.documentElement;
 
   function setValueVisibility(show){
-    const root=document.documentElement;
     root.classList.toggle('hideDiagramValues',!show);
     document.body?.classList.toggle('hideDiagramValues',!show);
     const b=$('#valueNotationToggle');
     if(b){
       b.classList.toggle('off',!show);
       b.setAttribute('aria-pressed',String(show));
-      b.innerHTML=`<span aria-hidden="true">${show?'◉':'○'}</span> Values`;
+      b.innerHTML=`<span aria-hidden="true">${show?'◉':'○'} Values`;
     }
     try{localStorage.setItem('ba-show-values',show?'1':'0')}catch{}
+  }
+
+  function savedValueVisibility(){
+    try{return (localStorage.getItem('ba-show-values')??'1')!=='0'}catch{return true}
+  }
+
+  function applyFeatureVisibility(){
+    const feature=$('#featureToggle');
+    const on=feature?feature.checked:true;
+    root.classList.toggle('hideChartFeatures',!on);
+    /* When features are hidden, value annotations are hidden too. When they
+       are shown again, restore the user's separate Values-button preference. */
+    const showValues=on && savedValueVisibility();
+    root.classList.toggle('hideDiagramValues',!showValues);
+    document.body?.classList.toggle('hideDiagramValues',!showValues);
+    const b=$('#valueNotationToggle');
+    if(b){
+      b.classList.toggle('off',!showValues);
+      b.setAttribute('aria-pressed',String(showValues));
+      b.innerHTML=`<span aria-hidden="true">${showValues?'◉':'○'} Values`;
+    }
   }
 
   function installValueToggle(){
     const b=$('#valueNotationToggle');
     if(!b)return;
-    /* v8 owns the original onclick. Replace it so one click means one state change. */
-    b.onclick=null;
-    b.addEventListener('click',()=>{
-      const hidden=document.documentElement.classList.contains('hideDiagramValues');
-      setValueVisibility(hidden);
-    });
-    let saved='1';
-    try{saved=localStorage.getItem('ba-show-values')??'1'}catch{}
-    setValueVisibility(saved!=='0');
+    if(b.dataset.v10Bound!=='1'){
+      b.dataset.v10Bound='1';
+      b.onclick=()=>setValueVisibility(!savedValueVisibility());
+    }
+    applyFeatureVisibility();
+  }
+
+  function installFeatureToggle(){
+    const b=$('#featureToggle');
+    if(!b)return;
+    if(b.dataset.v10Bound!=='1'){
+      b.dataset.v10Bound='1';
+      b.addEventListener('change',()=>{
+        applyFeatureVisibility();
+        if(typeof window.renderResults==='function')window.renderResults();
+      });
+    }
+    applyFeatureVisibility();
   }
 
   function fixCwMomentSpacing(){
@@ -48,11 +78,21 @@
 
   const style=document.createElement('style');
   style.textContent=`
-    /* Values toggle: hide numerical/value annotations, while retaining axes,
-       diagram geometry, support/load markers and dimensions. */
+    /* Hide chart values injected by chart-fixes-v2, not just the older
+       cleanDiagramValue selectors. */
+    :root.hideDiagramValues #charts .chartPointAnnotations,
+    :root.hideDiagramValues #charts .chartPointValue,
+    :root.hideDiagramValues #charts .chartTooltip{display:none!important}
+
+    /* Show features is now the master clean-view switch: guides, markers,
+       and numerical chart annotations disappear together when it is off. */
+    :root.hideChartFeatures #charts .features,
+    :root.hideChartFeatures #charts .chartPointAnnotations,
+    :root.hideChartFeatures #charts .chartTooltip{display:none!important}
+
+    /* Keep the original broad selectors for other annotation variants. */
     :root.hideDiagramValues #charts .cleanDiagramValue,
     :root.hideDiagramValues #charts .cleanDiagramAnnotations,
-    :root.hideDiagramValues #charts .chartTooltip,
     :root.hideDiagramValues #charts svg text:not(.chartTick):not(.chartAxisTitle){display:none!important}
 
     :root.hideDiagramValues #beamCanvas .pointLabel,
@@ -66,8 +106,7 @@
     :root.hideDiagramValues #beamCanvas .momentValueCompact,
     :root.hideDiagramValues #beamCanvas .momentDirCompact{display:none!important}
 
-    /* CW arcs pass closer to their label than CCW arcs. Give CW labels an
-       extra vertical buffer without moving the arrow or the beam. */
+    /* CW moment labels get a larger vertical buffer than CCW labels. */
     #beamCanvas .momentLabel.cwMomentValue{transform:translateY(-18px)}
   `;
   document.head.appendChild(style);
@@ -81,7 +120,8 @@
   }
 
   installValueToggle();
-  setTimeout(()=>{installValueToggle();fixCwMomentSpacing()},0);
-  setTimeout(()=>{installValueToggle();fixCwMomentSpacing()},150);
-  setTimeout(()=>{installValueToggle();fixCwMomentSpacing()},500);
+  installFeatureToggle();
+  fixCwMomentSpacing();
+  setTimeout(()=>{installValueToggle();installFeatureToggle();fixCwMomentSpacing()},100);
+  setTimeout(()=>{installValueToggle();installFeatureToggle();fixCwMomentSpacing()},400);
 })();
