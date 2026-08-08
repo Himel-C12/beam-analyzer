@@ -17,8 +17,6 @@
     model.loads.forEach(l=>{if(l.type==='point'&&l.angle==null)l.angle=0;});
   }
 
-  // Add the Angle column after the point-load value without disturbing
-  // the existing UDL/moment columns or their event handlers.
   const baseRenderInputs=window.renderInputs;
   if(typeof baseRenderInputs==='function'){
     window.renderInputs=function(){
@@ -99,7 +97,6 @@
     return nativeFetch(input,init);
   };
 
-  // Make the setup diagram show the actual direction of an angled point load.
   function patchBeamDiagram(){
     const canvas=$('#beamCanvas');
     if(!canvas||typeof model==='undefined')return;
@@ -119,7 +116,7 @@
         if(label){
           const raw=label.textContent||'';
           if(!raw.includes('°'))label.textContent=`${raw} @ ${Math.abs(angle)}°`;
-          label.setAttribute('transform',`rotate(${angle} ${x} ${y})`);
+          label.removeAttribute('transform');
         }
       }else if(label){
         label.removeAttribute('transform');
