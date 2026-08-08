@@ -135,6 +135,29 @@
     window.renderBeam();
   };
 
+  // Changing a point/moment into a distributed load now creates a real range and
+  // starts it as a uniform load. The user can then set From/To and Value 2 freely.
+  document.addEventListener('change',function(e){
+    const el=e.target;
+    if(!el.matches('#loadRows select[data-k="type"]')) return;
+    e.stopImmediatePropagation();
+    const loadId=Number(el.dataset.load), next=el.value;
+    window.mutate(()=>{
+      const l=window.model?.loads?.find(v=>v.id===loadId);
+      if(!l) return;
+      l.type=next;
+      if(next==='point'||next==='moment'){
+        l.to=l.from;
+        l.value2=0;
+      }else{
+        l.from=Math.max(0,Number(l.from)||0);
+        l.to=Math.min(window.len(),l.to===l.from?window.len():Number(l.to));
+        if(l.to<=l.from) l.to=window.len();
+        l.value2=Number(l.value);
+      }
+    });
+  },true);
+
   const style=document.createElement('style');
   style.textContent=`
     .beamViewport{height:385px}
