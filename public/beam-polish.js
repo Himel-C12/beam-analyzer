@@ -7,6 +7,7 @@
   const beamLen=window.len;
   const beamDrag=window.dragItem;
   const beamSupport=window.supportSvg;
+  const beamMutate=window.mutate;
 
   function activeSelect(){
     return $q('[data-view="select"]')?.classList.contains('active');
@@ -142,7 +143,7 @@
     if(!el.matches('#loadRows select[data-k="type"]')) return;
     e.stopImmediatePropagation();
     const loadId=Number(el.dataset.load), next=el.value;
-    window.mutate(()=>{
+    beamMutate(()=>{
       const l=window.model?.loads?.find(v=>v.id===loadId);
       if(!l) return;
       l.type=next;
