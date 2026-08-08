@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101214">
+<title>Beam Analyzer — SFD, BMD, AFD & Deflection</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">BA</div>
+    <div><strong>Beam Analyzer</strong><small>SFD · BMD · AFD · Deflection</small></div>
+  </div>
+  <div class="toolbar">
+    <button id="newBtn" class="iconBtn" title="New model"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New</span></button>
+    <button id="saveBtn" class="iconBtn" title="Save model"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h10l3 3v13H6zM9 4v6h7V4M9 20v-6h7v6"/></svg><span>Save</span></button>
+    <label class="fileBtn iconBtn" title="Load model"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg><span>Load</span><input id="loadInput" type="file" accept="application/json"></label>
+    <button id="shareBtn" class="iconBtn" title="Copy share link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.2 1.2M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.2-1.2"/></svg><span>Share</span></button>
+    <span class="toolbarSep"></span>
+    <div class="unitBox" aria-label="Unit system"><button data-unit="SI" class="active">SI</button><button data-unit="imperial">Imperial</button></div>
+    <button id="themeBtn" class="iconOnly" title="Toggle theme"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.8 6.8 0 0 0 21 12.8z"/></svg></button>
+  </div>
+</header>
+
+<main class="layout">
+<section class="maincol">
+  <div class="hero">
+    <div><h1>Beam calculator</h1></div>
+    <div class="status" id="status"><span class="statusDot"></span><span>Ready</span></div>
+  </div>
+
+  <section class="card beamCard">
+    <div class="cardHead">
+      <div><h2>Beam model</h2></div>
+      <div class="viewTools">
+        <button class="tool active" data-view="select"><span class="toolIcon">↖</span> Select</button>
+        <button class="tool" data-view="pan"><span class="toolIcon">✋</span> Pan</button>
+        <button class="tool" id="zoomOut">−</button><span id="zoomValue">100%</span><button class="tool" id="zoomIn">+</button>
+        <button class="tool" id="gridBtn"><span class="toolIcon">▦</span> Grid</button><button class="tool" id="dimsBtn"><span class="toolIcon">↔</span> Dimensions</button><button class="tool" id="resetView">Reset</button>
+      </div>
+    </div>
+    <div id="beamViewport" class="beamViewport"><div id="beamCanvas" class="beamCanvas"></div></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card"><div class="cardHead"><div><h2>Beam properties</h2></div><button id="addSpan">+ Span</button></div><div class="tableWrap"><table><thead><tr><th>#</th><th>Length</th><th>E (GPa)</th><th>I (mm⁴)</th><th></th></tr></thead><tbody id="spanRows"></tbody></table></div></section>
+    <section class="card"><div class="cardHead"><div><h2>Supports</h2></div><button id="addSupport">+ Support</button></div><div class="tableWrap"><table><thead><tr><th>#</th><th>Type</th><th>Position</th><th>Settlement (mm)</th><th></th></tr></thead><tbody id="supportRows"></tbody></table></div></section>
+  </div>
+
+  <section class="card"><div class="cardHead"><div><h2>Loads</h2></div><div class="actions"><button data-add="point">+ Point</button><button data-add="udl">+ UDL</button><button data-add="moment">+ Moment</button></div></div><div class="tableWrap"><table><thead><tr><th>#</th><th>Type</th><th>Value 1</th><th>Value 2</th><th>From</th><th>To</th><th></th></tr></thead><tbody id="loadRows"></tbody></table></div></section>
+
+  <div class="actionsBar"><button id="undoBtn">Undo</button><button id="redoBtn">Redo</button></div>
+  <div id="validation" class="message error hidden"></div><div id="error" class="message error hidden"></div>
+
+  <section class="card results">
+    <div class="cardHead"><div><h2>Results</h2></div><span class="solvedBadge" id="solvedBadge">Waiting</span></div>
+    <div class="metrics"><div><span>Max |V|</span><strong id="maxV">—</strong><small id="maxVPos">—</small></div><div><span>Max |M|</span><strong id="maxM">—</strong><small id="maxMPos">—</small></div><div><span>Max |δ|</span><strong id="maxD">—</strong><small id="maxDPos">—</small></div><div><span>Max |N|</span><strong id="maxN">0</strong><small>AFD</small></div></div>
+    <h3>Support reactions</h3><div id="reactions" class="tableWrap empty">—</div>
+  </section>
+
+  <section class="card diagramsCard">
+    <div class="cardHead diagramHead">
+      <div><h2>Diagrams</h2></div>
+      <div class="diagramTools"><label class="switch"><input id="featureToggle" type="checkbox" checked><span></span> Show features</label><button id="collapseAll">Collapse all</button></div>
+    </div>
+    <div id="charts" class="diagramGrid"></div>
+  </section>
+</section>
+
+<aside class="sidecol">
+  <section class="card"><h2>Point of interest</h2><label>X position <input id="poi" type="number" step="any" placeholder="e.g. 3"></label><button id="poiBtn" class="full">Evaluate</button><div id="poiOut" class="poiOut">Waiting for analysis.</div></section>
+  <section class="card"><h2>Report</h2><button id="reportBtn" class="full">Print calculation report</button></section>
+  <section class="card"><h2>Examples</h2><button class="example full" data-example="simple">8 m simply supported + 10 kN point load</button><button class="example full" data-example="udl">6 m simply supported + 10 kN/m UDL</button><button class="example full" data-example="cantilever">4 m cantilever + 20 kN end load</button></section>
+</aside>
+</main>
+<footer><div>Beam Analyzer · built from scratch · StructureCalcs API solver</div><strong>by Md. Hasanuzzaman Himel (RUET CE' 24)</strong></footer>
+<script src="/app.js"></script>
+</body></html>

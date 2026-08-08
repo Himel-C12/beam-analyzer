@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: beam-analyzer
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: STRUCTURECALCS_API_KEY
+        sync: false
+      - key: PORT
+        value: 3000
