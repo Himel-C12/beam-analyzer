@@ -7,7 +7,7 @@
   const fmtV=v=>typeof fmt==='function'?fmt(v):String(v);
   const unit=k=>typeof unitText==='function'?unitText(k):k;
 
-  // Reaction moments follow the solver's signed moment convention:
+  // Reaction moments use the solver's signed convention:
   // positive = CCW, negative = CW.
   function reactionMoment(v){
     const x=num(v);
@@ -36,9 +36,9 @@
     (model.supports||[]).forEach((s,i)=>points.push({x:num(s.position),label:`S${i+1}`}));
     (model.loads||[]).forEach(l=>{
       if(l.type==='udl'){
-        points.push({x:num(l.from),label:`L${l.id}`});
+        points.push({x:num(l.from),label:`L${l.id}`} );
         points.push({x:num(l.to),label:`L${l.id}`} );
-      }else points.push({x:num(l.from),label:`L${l.id}`});
+      }else points.push({x:num(l.from),label:`L${l.id}`} );
     });
     return points.filter(p=>finite(p.x)).sort((a,b)=>a.x-b.x).filter((p,i,a)=>i===0||Math.abs(p.x-a[i-1].x)>1e-8);
   }
@@ -87,7 +87,7 @@
       group.append(circle,text);g.appendChild(group);
     });
 
-    // Also mark the absolute maximum/minimum value because it is an important design point.
+    // Also mark the absolute maximum magnitude, a useful design point.
     let extreme=series[0];
     for(const p of series)if(Math.abs(p.y)>Math.abs(extreme.y))extreme=p;
     if(extreme){
@@ -120,15 +120,23 @@
   `;
   document.head.appendChild(style);
 
-  // Re-apply after results are rendered by the solver and after any unit/model change.
-  const charts=$('#charts');
-  if(charts)new MutationObserver(()=>requestAnimationFrame(annotateCharts)).observe(charts,{childList:true,subtree:true});
-  const reactions=$('#reactions');
-  if(reactions)new MutationObserver(()=>requestAnimationFrame(patchReactionTable)).observe(reactions,{childList:true,subtree:true});
+  // Wrap the app's renderResults so annotations are applied immediately after each solve.
+  const baseRenderResults=window.renderResults;
+  if(typeof baseRenderResults==='function'){
+    window.renderResults=function(){
+      baseRenderResults();
+      requestAnimationFrame(annotateCharts);
+    };
+  }
 
+  // Also cover explicit render calls such as unit switches, load/new, undo and redo.
   const baseRender=window.render;
   if(typeof baseRender==='function'){
-    window.render=function(){baseRender();requestAnimationFrame(annotateCharts);};
+    window.render=function(){
+      baseRender();
+      requestAnimationFrame(annotateCharts);
+    };
   }
+
   setTimeout(annotateCharts,0);
 })();
