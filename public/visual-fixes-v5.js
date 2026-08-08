@@ -7,6 +7,7 @@
    - point/UDL arrows are strictly vertical
    - zero-intensity end of a UDL has no arrow; only the taper line remains
    - moment arc/value are separated and the arrow follows the arc
+   - moment labels show CW/CCW without a redundant negative sign
    - beam/support/load dragging is intentionally disabled
 */
 (function(){
@@ -21,10 +22,12 @@
   }
 
   function markerDefs(){
+    /* context-stroke makes marker heads inherit the actual load color,
+       so they remain visible in both light and dark themes. */
     return `<defs>
-      <marker id="baDown" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" class="arrowHead"/></marker>
-      <marker id="baUp" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M10 0L0 5L10 10Z" class="arrowHead"/></marker>
-      <marker id="baMoment" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" class="momentHead"/></marker>
+      <marker id="baDown" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" class="arrowHead" fill="context-stroke" stroke="context-stroke"/></marker>
+      <marker id="baUp" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M10 0L0 5L10 10Z" class="arrowHead" fill="context-stroke" stroke="context-stroke"/></marker>
+      <marker id="baMoment" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" class="momentHead" fill="context-stroke" stroke="context-stroke"/></marker>
     </defs>`;
   }
 
@@ -48,12 +51,12 @@
   function momentGraphic(v,x,y){
     const clockwise=n(v)>0;
     const r=24;
-    // Two compact arcs give a clean, unambiguous circular direction.
     const path=clockwise
       ? `M${x-18} ${y-9} A${r} ${r} 0 1 1 ${x+12} ${y-25}`
       : `M${x+18} ${y-9} A${r} ${r} 0 1 1 ${x-12} ${y-25}`;
+    const direction=clockwise?'CW':'CCW';
     return `<path d="${path}" class="momentArc" marker-end="url(#baMoment)"/>
-      <text x="${x}" y="${y-54}" text-anchor="middle" class="momentLabel">${n(v)<0?'−':''}${f(Math.abs(n(v)))} ${u('moment')}</text>`;
+      <text x="${x}" y="${y-54}" text-anchor="middle" class="momentLabel">${f(Math.abs(n(v)))} ${u('moment')} ${direction}</text>`;
   }
 
   function render(){
@@ -70,7 +73,6 @@
       <rect width="${W}" height="${H}" class="diagramCanvas"/>
       <rect x="${pad}" y="${by-3}" width="${W-2*pad}" height="${beamHeight}" rx="1" class="beam"/>`;
 
-    // Distributed loads.
     (model.loads||[]).filter(l=>l.type==='udl').forEach(l=>{
       const a=x(l.from),b=x(l.to),v1=n(l.value),v2=n(l.value2??l.value);
       const max=Math.max(Math.abs(v1),Math.abs(v2),1e-9);
@@ -78,14 +80,12 @@
       const loadY=v=>v<0?by-(Math.abs(v)/max)*maxH:by+(Math.abs(v)/max)*maxH;
       const y1=loadY(v1),y2=loadY(v2);
 
-      // The envelope/hairline always reaches the actual zero end.
       s+=`<line x1="${a}" y1="${y1}" x2="${b}" y2="${y2}" class="udlLine"/>`;
 
       const count=Math.max(8,Math.min(30,Math.round((b-a)/34)+1));
       const arrowCutoff=max*0.12;
       for(let i=0;i<count;i++){
         const t=i/(count-1),xx=a+(b-a)*t,v=v1+(v2-v1)*t,yy=loadY(v);
-        // Near a zero-intensity end, leave only the hairline.
         if(Math.abs(v)<=arrowCutoff)continue;
         const down=v<0;
         s+=`<line x1="${xx.toFixed(2)}" y1="${yy.toFixed(2)}" x2="${xx.toFixed(2)}" y2="${(down?by-4:by+4).toFixed(2)}" class="udlArrow" marker-end="url(#${down?'baDown':'baUp'})"/>`;
@@ -97,7 +97,6 @@
       s+=`<text x="${a}" y="${Math.min(y1,y2)-12}" class="udlLabel">${label}</text>`;
     });
 
-    // Point loads.
     (model.loads||[]).filter(l=>l.type==='point').forEach(l=>{
       const xx=x(l.from),v=n(l.value),down=v<0;
       const start=down?27:by+76;
@@ -106,10 +105,8 @@
       s+=`<text x="${xx}" y="${down?18:by+93}" text-anchor="middle" class="pointLabel">${v<0?'−':''}${f(Math.abs(v))} ${u('force')}</text>`;
     });
 
-    // Applied moments: compact circular arrow + separated value label.
     (model.loads||[]).filter(l=>l.type==='moment').forEach(l=>s+=momentGraphic(l.value,x(l.from),by-4));
 
-    // Supports: larger, distinct engineering symbols. No drag handlers.
     (model.supports||[]).forEach((sp,i)=>{
       const xx=x(sp.position),name=sp.type==='fixed'?'Fixed':sp.type==='roller'?'Roller':'Pin';
       s+=support(sp.type,xx,by);
@@ -119,7 +116,6 @@
         <text x="${xx}" y="${by+73}" text-anchor="middle" class="supportPosition">@ ${f(sp.position)} ${u('length')}</text>`;
     });
 
-    // Dimensions: one clean dimension band, avoiding collisions with load labels.
     if(showDims){
       const ry=310;
       const points=[];
@@ -160,7 +156,6 @@
 
   const style=document.createElement('style');
   style.textContent=`
-    /* Diagram surface follows the exact application theme. */
     .beamViewport{background:var(--card)!important;border-color:var(--line)!important;padding:0!important;box-shadow:none!important}
     .beamCanvas{background:var(--card)!important}
     .beamCanvas svg{background:transparent!important}
@@ -179,13 +174,12 @@
     .supportName{font-size:12px}.supportPosition{font-size:10px;fill:var(--muted)}
     .udlLine{stroke:#27b97a;stroke-width:1.6;fill:none;vector-effect:non-scaling-stroke}
     .udlArrow{stroke:#27b97a;stroke-width:1.2;vector-effect:non-scaling-stroke}
-    .udlArrow.arrowHead{fill:#27b97a}
+    .arrowHead{fill:context-stroke;stroke:context-stroke}
     .udlLabel{fill:#20aa70;font-size:13px;font-weight:700}
     .pointArrow{stroke:#ed4f4f;stroke-width:1.8;vector-effect:non-scaling-stroke}
-    .pointArrow.arrowHead{fill:#ed4f4f}
     .pointLabel{fill:#ed4f4f;font-size:13px;font-weight:700}
     .momentArc{stroke:#f2a329;stroke-width:2.1;fill:none;vector-effect:non-scaling-stroke}
-    .momentHead{fill:#f2a329;stroke:#f2a329}
+    .momentHead{fill:context-stroke;stroke:context-stroke}
     .momentLabel{fill:#f2a329;font-size:13px;font-weight:700}
     .dim{stroke:#7b8794;stroke-width:1;vector-effect:non-scaling-stroke}.tick{stroke:#7b8794;stroke-width:1;vector-effect:non-scaling-stroke}
     .dimLabel{fill:var(--muted);font-size:10px;font-weight:600}.dimText{fill:var(--muted);font-size:11px}.overall{fill:var(--text);font-size:12px;font-weight:700}.sectionNote,.axis{fill:var(--muted);font-size:10px}
@@ -199,7 +193,6 @@
   window.renderBeam=render;
   setTimeout(render,0);
 
-  // Re-render only when the theme changes. No drag behaviour is installed.
   new MutationObserver(muts=>{
     if(muts.some(m=>m.type==='attributes'&&m.attributeName==='class'))render();
   }).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
