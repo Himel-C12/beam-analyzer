@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#101214">
 <title>Beam Analyzer by Himel — SFD, BMD, AFD & Deflection</title>
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" href="/logo.png">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <div class="logo">BAH</div>
+    <div class="logo"><img src="/logo.png" alt="Himel logo"></div>
     <div><strong>Beam Analyzer by Himel</strong><small>SFD · BMD · AFD · Deflection</small></div>
   </div>
   <div class="toolbar">
@@ -27,22 +27,24 @@
 <main class="layout">
 <section class="maincol">
   <div class="hero"><div><h1>Beam calculator</h1></div><div class="status" id="status"><span class="statusDot"></span><span>Ready</span></div></div>
-  <section class="card beamCard"><div class="cardHead"><div><h2>Beam model</h2></div><div class="viewTools"><button class="tool active" data-view="select"><span class="toolIcon">↖</span> Select</button><button class="tool" data-view="pan"><span class="toolIcon">✋</span> Pan</button><button class="tool" id="zoomOut">−</button><span id="zoomValue">100%</span><button class="tool" id="zoomIn">+</button><button class="tool" id="gridBtn"><span class="toolIcon">▦</span> Grid</button><button class="tool" id="dimsBtn"><span class="toolIcon">↔</span> Dimensions</button><button class="tool" id="resetView">Reset</button></div></div><div id="beamViewport" class="beamViewport"><div id="beamCanvas" class="beamCanvas"></div></div></section>
+  <section class="card beamCard"><div class="cardHead"><div><h2>Beam model</h2></div><div class="viewTools"><button class="tool active" data-view="select"><span class="toolIcon">↖</span> Select</button><button class="tool" data-view="pan"><span class="toolIcon">✋</span> Pan</button><button class="tool" id="zoomOut">−</button><span id="zoomValue">100%</span><button class="tool" id="zoomIn">+</button><button class="tool" id="dimsBtn"><span class="toolIcon">↔</span> Dimensions</button><button class="tool" id="resetView">Reset</button><button id="gridBtn" hidden aria-hidden="true" tabindex="-1"></button></div></div><div id="beamViewport" class="beamViewport"><div id="beamCanvas" class="beamCanvas"></div></div></section>
   <div class="grid2"><section class="card"><div class="cardHead"><div><h2>Beam properties</h2></div><button id="addSpan">+ Span</button></div><div class="tableWrap"><table><thead><tr><th>#</th><th>Length</th><th>E (GPa)</th><th>I (mm⁴)</th><th></th></tr></thead><tbody id="spanRows"></tbody></table></div></section><section class="card"><div class="cardHead"><div><h2>Supports</h2></div><button id="addSupport">+ Support</button></div><div class="tableWrap"><table><thead><tr><th>#</th><th>Type</th><th>Position</th><th>Settlement (mm)</th><th></th></tr></thead><tbody id="supportRows"></tbody></table></div></section></div>
   <section class="card"><div class="cardHead"><div><h2>Loads</h2></div><div class="actions"><button data-add="point">+ Point</button><button data-add="udl">+ UDL</button><button data-add="moment">+ Moment</button></div></div><div class="tableWrap"><table><thead><tr><th>#</th><th>Type</th><th>Value</th><th>Value 2 (UDL)</th><th>Angle (°)</th><th>Position / From</th><th>To (UDL)</th><th></th></tr></thead><tbody id="loadRows"></tbody></table></div></section>
   <div class="actionsBar"><button id="undoBtn">Undo</button><button id="redoBtn">Redo</button></div><div id="validation" class="message error hidden"></div><div id="error" class="message error hidden"></div>
   <section class="card results"><div class="cardHead"><div><h2>Results</h2></div><span class="solvedBadge" id="solvedBadge">Waiting</span></div><div class="metrics"><div><span>Max |V|</span><strong id="maxV">—</strong><small id="maxVPos">—</small></div><div><span>Max |M|</span><strong id="maxM">—</strong><small id="maxMPos">—</small></div><div><span>Max |δ|</span><strong id="maxD">—</strong><small id="maxDPos">—</small></div><div><span>Max |N|</span><strong id="maxN">0</strong><small>AFD</small></div></div><h3>Support reactions</h3><div id="reactions" class="tableWrap empty">—</div></section>
-  <section class="card diagramsCard"><div class="cardHead diagramHead"><div><h2>Diagrams</h2></div><div class="diagramTools"><label class="switch"><input id="featureToggle" type="checkbox" checked><span></span> Show features</label><button id="collapseAll">Collapse all</button></div></div><div id="charts" class="diagramGrid"></div></section>
+  <section class="card diagramsCard"><div class="cardHead diagramHead"><div><h2>Diagrams</h2></div><div class="diagramTools"><button id="valueNotationToggle" type="button" class="valueToggle" aria-pressed="true">◉ Values</button><label class="switch"><input id="featureToggle" type="checkbox" checked><span></span> Show features</label><button id="collapseAll">Collapse all</button></div></div><div id="charts" class="diagramGrid"></div></section>
 </section>
 <aside class="sidecol"><section class="card"><h2>Point of interest</h2><label>X position <input id="poi" type="number" step="any" placeholder="e.g. 3"></label><button id="poiBtn" class="full">Evaluate</button><div id="poiOut" class="poiOut">Waiting for analysis.</div></section><section class="card"><h2>Report</h2><button id="reportBtn" class="full">Print calculation report</button></section><section class="card"><h2>Examples</h2><button class="example full" data-example="simple">8 m simply supported + 10 kN point load</button><button class="example full" data-example="udl">6 m simply supported + 10 kN/m UDL</button><button class="example full" data-example="cantilever">4 m cantilever + 20 kN end load</button></section></aside>
 </main>
 <footer><div>Beam Analyzer · built from scratch · StructureCalcs API solver</div><strong>by Md. Hasanuzzaman Himel (RUET CE' 24)</strong></footer>
 <script src="/app.js"></script>
 <script src="/unit-toggle-fix.js?v=1"></script>
-<script src="/visual-fixes-v5.js?v=2"></script>
-<script src="/minor-fixes-v7.js?v=1"></script>
-<script src="/angular-loads-v1.js?v=1"></script>
-<script src="/ui-fixes-v8.js?v=1"></script>
-<script src="/ui-fixes-v9.js?v=1"></script>
-<script src="/visual-fixes-v6.js?v=1"></script>
+<script src="/visual-fixes-v5.js?v=3"></script>
+<script src="/minor-fixes-v7.js?v=2"></script>
+<script src="/angular-loads-v1.js?v=2"></script>
+<script src="/ui-fixes-v8.js?v=2"></script>
+<script src="/ui-fixes-v9.js?v=2"></script>
+<script src="/visual-fixes-v6.js?v=2"></script>
+<script src="/internal-hinge-v1.js?v=1"></script>
+<script src="/chart-readability-v1.js?v=1"></script>
 </body></html>
