@@ -1,9 +1,9 @@
 /* SFD discontinuity rendering fix.
    Point-load jumps are true vertical discontinuities. The main chart path is
-   correct mathematically, but a single SVG path creates a miter join at the
-   horizontal/vertical corners, which appears as a small triangular bump.
-   Split the segments around duplicate-x jumps so the vertical jump has no
-   joined corners and therefore no overshoot/spike.
+   mathematically correct, but a single SVG path creates miter joins at the
+   horizontal/vertical corners, which appear as small triangular bumps.
+   Split the segments around duplicate-x jumps so all three pieces (before,
+   vertical jump, after) are independent subpaths.
 */
 (function(){
   const near=(a,b)=>Math.abs(a-b)<=1e-8*Math.max(1,Math.abs(a),Math.abs(b));
@@ -23,14 +23,15 @@
 
     const sx=x=>pad+(x/L)*(w-2*pad);
     const sy=y=>h-pad-(y-min)/(max-min||1)*(h-2*pad);
-    const p=p=>`${sx(Number(p.x)).toFixed(1)} ${sy(Number(p.y)).toFixed(1)}`;
+    const p=q=>`${sx(Number(q.x)).toFixed(1)} ${sy(Number(q.y)).toFixed(1)}`;
 
     let d='';
     for(let i=1;i<series.length;i++){
       const a=series[i-1],b=series[i];
       const duplicateX=near(Number(a.x),Number(b.x));
       const nextIsJump=i+1<series.length && near(Number(b.x),Number(series[i+1].x));
-      const startNew=(i===1)||duplicateX||nextIsJump;
+      const previousWasJump=i>1 && near(Number(series[i-2].x),Number(a.x));
+      const startNew=(i===1)||duplicateX||nextIsJump||previousWasJump;
       d+=`${startNew?'M':'L'} ${p(a)} L ${p(b)} `;
     }
 
