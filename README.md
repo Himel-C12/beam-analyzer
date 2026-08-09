@@ -7,7 +7,8 @@ A browser-based structural beam analyzer by **Md. Hasanuzzaman Himel (RUET CE' 2
 - Automatic beam analysis through the StructureCalcs API.
 - SI and Imperial unit systems with in-place value conversion.
 - Pin, roller, and fixed supports.
-- **Internal hinges**: add an `Internal Hinge` from the Supports table. The UI maps the hinge location to the solver's span `connection: "hinge"`, which releases bending moment while transferring shear.
+- **Internal hinges**: add an `Internal Hinge` from the Supports table. The hinge is a UI-level modeling object; before the solve request is sent, the affected span is split at the hinge and the span beginning at that location is sent with `connection: "hinge"`. The hinge itself is not sent as an external support, so it releases bending moment while transferring shear.
+- Multiple internal hinges are supported, including hinges inside a span and at existing span boundaries.
 - Point loads, angular point loads, UDLs/linearly varying distributed loads, and applied moments.
 - Point-load angle input defaults to `0°`; non-zero angles use the vertical component for the current beam solver.
 - Clear engineering-style beam visualization with vertical load arrows and distinct support symbols.
@@ -18,13 +19,15 @@ A browser-based structural beam analyzer by **Md. Hasanuzzaman Himel (RUET CE' 2
 - Light and dark themes.
 - Save/load model JSON and copyable share links.
 - Printable calculation report.
-- Custom logo and favicon using the BeamLab mark.
+- Custom logo and favicon using the supplied Himel mark.
 
 ## Solver
 
 Beam analysis is performed by the StructureCalcs API. The server keeps the API key private and proxies analysis requests from the browser.
 
-The API supports multi-span beams with internal hinges through span connections. See the [StructureCalcs API documentation](https://structurecalcs.com/api) for the underlying solver and request format.
+StructureCalcs supports multi-span beams with per-span `E`/`I` and internal hinge connections. Its API defines `connection: "hinge"` as an internal shear hinge that transfers shear and releases moment; the first span must remain `rigid`. urlStructureCalcs API documentationhttps://structurecalcs.com/api
+
+The Beam Analyzer uses a small fetch-boundary adapter (`public/internal-hinge-v2.js`) so the existing solver function sends the transformed, API-compatible model without duplicating the main analysis code.
 
 ## Run locally
 
