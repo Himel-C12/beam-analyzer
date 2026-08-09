@@ -1,16 +1,13 @@
-/* SFD discontinuity rendering fix.
-   Point-load jumps are true vertical discontinuities. The main chart path is
-   mathematically correct, but a single SVG path creates miter joins at the
-   horizontal/vertical corners, which appear as small triangular bumps.
-   Split the segments around duplicate-x jumps so all three pieces (before,
-   vertical jump, after) are independent subpaths.
+/* SFD discontinuity rendering fix v2.
+   Render each SFD segment independently. Point-load jumps are drawn as an
+   explicit vertical SVG line, never as a joined polyline. This prevents
+   SVG joins from producing the visible triangular/diagonal spike.
 */
 (function(){
-  const near=(a,b)=>Math.abs(a-b)<=1e-8*Math.max(1,Math.abs(a),Math.abs(b));
+  const near=(a,b,tol)=>Math.abs(a-b)<=tol*Math.max(1,Math.abs(a),Math.abs(b));
 
   function patchSfd(svg){
-    const line=svg.querySelector('.chartLine');
-    if(!line || line.dataset.jumpFixed==='1') return;
+    if(svg.dataset.jumpFixed==='2') return;
 
     let series=[];
     try { series=JSON.parse(svg.dataset.series||'[]'); } catch { return; }
@@ -23,22 +20,46 @@
 
     const sx=x=>pad+(x/L)*(w-2*pad);
     const sy=y=>h-pad-(y-min)/(max-min||1)*(h-2*pad);
-    const p=q=>`${sx(Number(q.x)).toFixed(1)} ${sy(Number(q.y)).toFixed(1)}`;
+    const pt=q=>({x:sx(Number(q.x)),y:sy(Number(q.y))});
 
-    let d='';
+    const old=svg.querySelector('.chartLine');
+    if(!old) return;
+
+    const group=document.createElementNS('http://www.w3.org/2000/svg','g');
+    group.classList.add('chartLineGroup');
+
+    // Use the actual data range for a conservative jump tolerance. A point
+    // load should have essentially the same x-coordinate on both sides.
+    const xTol=Math.max(L*1e-5,1e-7);
+
     for(let i=1;i<series.length;i++){
       const a=series[i-1],b=series[i];
-      const duplicateX=near(Number(a.x),Number(b.x));
-      const nextIsJump=i+1<series.length && near(Number(b.x),Number(series[i+1].x));
-      const previousWasJump=i>1 && near(Number(series[i-2].x),Number(a.x));
-      const startNew=(i===1)||duplicateX||nextIsJump||previousWasJump;
-      d+=`${startNew?'M':'L'} ${p(a)} L ${p(b)} `;
+      const pa=pt(a),pb=pt(b);
+      const dx=Math.abs(Number(b.x)-Number(a.x));
+      const dy=Math.abs(Number(b.y)-Number(a.y));
+
+      if(dx<=xTol && dy>0){
+        const jump=document.createElementNS('http://www.w3.org/2000/svg','line');
+        jump.setAttribute('x1',pa.x.toFixed(1));
+        jump.setAttribute('y1',pa.y.toFixed(1));
+        jump.setAttribute('x2',pb.x.toFixed(1));
+        jump.setAttribute('y2',pb.y.toFixed(1));
+        jump.setAttribute('class','chartLine sfdJump');
+        jump.setAttribute('stroke-linecap','butt');
+        jump.setAttribute('stroke-linejoin','miter');
+        group.appendChild(jump);
+      }else{
+        const seg=document.createElementNS('http://www.w3.org/2000/svg','path');
+        seg.setAttribute('d',`M ${pa.x.toFixed(1)} ${pa.y.toFixed(1)} L ${pb.x.toFixed(1)} ${pb.y.toFixed(1)}`);
+        seg.setAttribute('class','chartLine sfdSegment');
+        seg.setAttribute('stroke-linecap','butt');
+        seg.setAttribute('stroke-linejoin','miter');
+        group.appendChild(seg);
+      }
     }
 
-    line.setAttribute('d',d.trim());
-    line.setAttribute('stroke-linejoin','miter');
-    line.setAttribute('stroke-linecap','butt');
-    line.dataset.jumpFixed='1';
+    old.replaceWith(group);
+    svg.dataset.jumpFixed='2';
   }
 
   function patch(){
