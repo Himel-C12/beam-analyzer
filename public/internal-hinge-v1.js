@@ -20,7 +20,7 @@
       for(let i=0;i<cuts.length-1;i++){
         const a=cuts[i],b=cuts[i+1];
         if(b-a<=EPS)continue;
-        out.push({length:b-a,E:n(original.E),I:n(original.I),connection:out.length&&hinges.some(h=>at(h,a))?'hinge':'rigid'});
+        out.push({length:b-a,E:n(original.E),I:n(original.I),connection:(out.length>0&&hinges.some(h=>at(h,a)))?'hinge':'rigid'});
       }
       start=end;
     }
