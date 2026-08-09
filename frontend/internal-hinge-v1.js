@@ -119,6 +119,7 @@
         label.textContent=`H${hingeNo} (Internal Hinge)`;
         label.previousElementSibling?.style.setProperty('display','none');
         label.previousElementSibling?.previousElementSibling?.style.setProperty('display','none');
+        label.previousElementSibling?.previousElementSibling?.previousElementSibling?.style.setProperty('display','none');
       }
       const posLabel=label?.nextElementSibling;
       if(posLabel)posLabel.textContent=`@ ${typeof fmt==='function'?fmt(s.position):s.position} ${typeof unitText==='function'?unitText('length'):'m'}`;
