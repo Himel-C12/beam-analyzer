@@ -1,13 +1,10 @@
-/* SFD discontinuity rendering fix v2.
-   Point-load jumps are true vertical discontinuities. The SFD line and the
-   shaded area must both respect those discontinuities. A normal SVG path
-   cannot be allowed to connect the two sides of a jump, otherwise the area
-   renderer creates a false triangular wedge.
+/* SFD discontinuity rendering fix v3.
+   The solver can return the two sides of a point-load jump with tiny but
+   non-zero x separation. Treat those pairs as one vertical discontinuity.
+   Both the line and the shaded area must use the same normalized geometry.
 */
 (function(){
-  const near=(a,b)=>Math.abs(a-b)<=1e-8*Math.max(1,Math.abs(a),Math.abs(b));
-
-  function coords(svg){
+  function geometry(svg){
     const w=1100,h=330,pad=Number(svg.dataset.pad)||56;
     const L=Number(svg.dataset.len)||1;
     const min=Number(svg.dataset.min),max=Number(svg.dataset.max);
@@ -16,91 +13,112 @@
     return {w,h,pad,L,min,max,sx,sy};
   }
 
-  function point(q,c){
-    return `${c.sx(Number(q.x)).toFixed(1)} ${c.sy(Number(q.y)).toFixed(1)}`;
+  function normalize(series,c){
+    const range=Math.max(Math.abs(c.max-c.min),1e-9);
+    // The upstream diagram may place the two sides of a point-load jump a
+    // few millimetres apart. A tolerance of 0.2% of the beam length is large
+    // enough to catch that rendering artifact while remaining tiny compared
+    // with normal span/load intervals.
+    const xTol=Math.max(c.L*0.002,0.01);
+    const yTol=range*0.02;
+    const out=series.map(p=>({x:Number(p.x),y:Number(p.y)}));
+    const jumps=[];
+
+    for(let i=1;i<out.length;i++){
+      const a=out[i-1],b=out[i];
+      const dx=Math.abs(b.x-a.x),dy=Math.abs(b.y-a.y);
+      if(dx<=xTol && dy>=yTol){
+        const x=(a.x+b.x)/2;
+        a.x=x;
+        b.x=x;
+        jumps.push(i);
+      }
+    }
+    return {series:out,jumps};
   }
 
-  // Build the SFD line as independent pieces. Duplicate-x pairs are the
-  // actual vertical jumps and are deliberately kept separate from adjacent
-  // horizontal/sloping segments.
-  function jumpLine(series,c){
+  function pt(p,c){
+    return `${c.sx(p.x).toFixed(1)} ${c.sy(p.y).toFixed(1)}`;
+  }
+
+  function linePath(series,jumps,c){
     let d='';
+    const jumpAt=new Set(jumps);
     for(let i=1;i<series.length;i++){
       const a=series[i-1],b=series[i];
-      const duplicateX=near(Number(a.x),Number(b.x));
-      const startsAfterJump=i>1 && near(Number(series[i-2].x),Number(a.x));
-      const starts= i===1 || duplicateX || startsAfterJump;
-      d+=`${starts?'M':'L'} ${point(a,c)} L ${point(b,c)} `;
+      if(jumpAt.has(i)){
+        // Explicit vertical jump; never let SVG interpolate it diagonally.
+        d+=`M ${pt(a,c)} L ${pt(b,c)} `;
+      }else{
+        d+=`${i===1?'M':'L'} ${pt(a,c)} L ${pt(b,c)} `;
+      }
     }
     return d.trim();
   }
 
-  // Build the shaded SFD area one continuous-x run at a time. At a point
-  // load, the two sides share the same x but different y; they must NEVER be
-  // joined by the fill polygon.
-  function jumpArea(series,c,zero){
-    if(!series.length) return '';
+  function areaPath(series,jumps,c,zero){
+    if(!series.length)return'';
+    const jumpAt=new Set(jumps);
     const runs=[];
     let run=[series[0]];
-
     for(let i=1;i<series.length;i++){
-      const a=series[i-1],b=series[i];
-      if(near(Number(a.x),Number(b.x))){
-        // Finish the side before the jump, then begin the side after it.
+      if(jumpAt.has(i)){
         runs.push(run);
-        run=[b];
+        run=[series[i]];
       }else{
-        run.push(b);
+        run.push(series[i]);
       }
     }
-    if(run.length) runs.push(run);
+    if(run.length)runs.push(run);
 
     return runs.filter(r=>r.length).map(r=>{
-      const first=point({x:r[0].x,y:zero},c);
-      const last=point({x:r[r.length-1].x,y:zero},c);
-      const body=r.map(p=>point(p,c)).join(' L ');
-      return `M ${first} L ${body} L ${last} Z`;
+      const first=pt({x:r[0].x,y:zero},c);
+      const last=pt({x:r[r.length-1].x,y:zero},c);
+      return `M ${first} L ${r.map(p=>pt(p,c)).join(' L ')} L ${last} Z`;
     }).join(' ');
   }
 
-  function patchSfd(svg){
-    if(svg.dataset.jumpFixed==='2') return;
-    let series=[];
-    try { series=JSON.parse(svg.dataset.series||'[]'); } catch { return; }
-    if(!Array.isArray(series) || series.length<2) return;
-    const c=coords(svg);
-    if(!Number.isFinite(c.min)||!Number.isFinite(c.max)||!c.L) return;
+  function patch(svg){
+    if(svg.dataset.jumpFixed==='3')return;
+    let raw=[];
+    try{raw=JSON.parse(svg.dataset.series||'[]')}catch{return}
+    if(!Array.isArray(raw)||raw.length<2)return;
+    const c=geometry(svg);
+    if(!Number.isFinite(c.min)||!Number.isFinite(c.max)||!c.L)return;
 
+    const n=normalize(raw,c),series=n.series,jumps=n.jumps;
     const line=svg.querySelector('.chartLine');
     const area=svg.querySelector('.chartArea');
     if(line){
-      line.setAttribute('d',jumpLine(series,c));
+      line.setAttribute('d',linePath(series,jumps,c));
       line.setAttribute('stroke-linejoin','miter');
       line.setAttribute('stroke-linecap','butt');
     }
     if(area){
-      area.setAttribute('d',jumpArea(series,c,0));
+      area.setAttribute('d',areaPath(series,jumps,c,0));
     }
-    svg.dataset.jumpFixed='2';
+    // Keep hover/feature calculations on the same normalized coordinates.
+    svg.dataset.series=JSON.stringify(series);
+    svg.dataset.jumpFixed='3';
   }
 
-  function patch(){
-    document.querySelectorAll('#charts svg[data-kind="shear"]').forEach(patchSfd);
+  function patchAll(){
+    document.querySelectorAll('#charts svg[data-kind="shear"]').forEach(patch);
   }
 
   function start(){
-    patch();
+    patchAll();
     const charts=document.querySelector('#charts');
-    if(!charts) return;
+    if(!charts)return;
     let queued=false;
     const observer=new MutationObserver(()=>{
-      if(queued) return;
+      if(queued)return;
       queued=true;
-      requestAnimationFrame(()=>{queued=false;patch();});
+      requestAnimationFrame(()=>{queued=false;patchAll()});
     });
     observer.observe(charts,{childList:true,subtree:true});
   }
 
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);
   else start();
 })();
