@@ -1,56 +1,125 @@
-# Beam Analyzer
+# Beam Analyzer by Himel
 
-A browser-based structural beam analyzer by **Md. Hasanuzzaman Himel (RUET CE' 24)**. The interface handles beam properties, supports, loads, unit switching, and engineering diagrams for SFD, BMD, AFD, deflection, and rotation.
+A browser-based beam analysis tool for calculating and visualizing **Shear Force Diagram (SFD), Bending Moment Diagram (BMD), Axial Force Diagram (AFD), deflection, and rotation/slope**.
 
-## Current features
+**Live app:** https://himel-c12.github.io/beam-analyzer/
 
-- Local browser-based beam analysis with a deterministic Euler-Bernoulli direct-stiffness solver.
-- SI and Imperial unit systems with in-place value conversion.
-- Pin, roller, and fixed supports.
-- Internal hinges with released rotations.
-- Multiple spans and internal hinges.
-- Point loads, angular point loads, UDLs/linearly varying distributed loads, and applied moments.
-- Point-load angle input defaults to `0°`; non-zero angles use the vertical component for the current beam solver.
-- Clear engineering-style beam visualization with vertical load arrows and distinct support symbols.
-- CW/CCW labels for applied moments and support-reaction moments.
-- SFD, BMD, AFD, deflection, and rotation diagrams with important-point values and jump annotations.
-- Optional diagram value annotations for a cleaner presentation.
-- Automatic label fitting for unusually large numerical values so chart labels remain visible.
-- Light and dark themes.
-- Save/load model JSON and copyable share links.
-- Printable calculation report.
-- Custom logo and favicon using the supplied Himel mark.
+## What it can analyze
 
-## Solver
+- Pin, roller, and fixed supports
+- Internal hinges
+- Single or multiple spans
+- Point loads
+- Point loads at an angle
+- UDLs and linearly varying distributed loads
+- Applied moments
+- Support settlement
+- SI and Imperial units
 
-Beam analysis is performed locally in the browser. The solver uses an Euler-Bernoulli beam stiffness formulation with released rotations at internal hinges and a Gaussian elimination solve for the structural system.
+## How to use it
 
-Normal beam analysis and internal-hinge analysis therefore do not require the StructureCalcs API or a server-side API key.
+### 1. Define the beam
 
-## Run locally
+Under **Beam properties**, enter the length of each span.
 
-The production frontend is the `public/` directory and can be served by any static HTTP server.
+For each span, enter:
 
-The repository also retains the Node server for development/server compatibility:
+- **Length** — beam length
+- **E (GPa)** — Young's modulus
+- **I (mm⁴)** — second moment of area
 
-1. Run `npm install`.
-2. Run `npm start`.
-3. Open `http://localhost:3000`.
+Use **+ Span** if the beam has multiple spans.
 
-No StructureCalcs API key is required for the current local solver path.
+### 2. Add supports
 
-## Project structure
+Under **Supports**, add the required supports and enter their positions along the beam.
 
-- `public/` — production static frontend.
-- `frontend/` — older frontend source mirror retained for reference.
-- `server/` — Node server retained for local/server compatibility.
-- `.github/workflows/pages.yml` — GitHub Pages deployment workflow.
-- `render.yaml` — legacy Render configuration retained but no longer required for production hosting.
+Available support types:
 
-## Deployment
+- **Pin**
+- **Roller**
+- **Fixed**
+- **Internal Hinge**
 
-The production site is deployed to GitHub Pages. GitHub Actions publishes `public/` on every push to `main`. GitHub Pages is a static hosting service, which fits the current browser-only solver architecture. citeturn0search2turn0search1
+For supports that allow settlement, enter the settlement value in **mm**.
 
-## Credits
+### 3. Add loads
 
-Beam Analyzer is a student-built engineering tool by **Md. Hasanuzzaman Himel**, RUET Civil Engineering.
+Under **Loads**, use the appropriate button:
+
+- **Point** — concentrated force at a position
+- **UDL / varying** — distributed load between `From` and `To`
+- **Moment** — applied concentrated moment at a position
+
+For a varying distributed load, enter the load intensity at both ends using **Value** and **Value 2 (UDL)**.
+
+Use the sign convention shown by the input values. For vertical loads, a negative value represents a downward load.
+
+### 4. Check the analysis
+
+The tool solves the model automatically after the inputs are changed.
+
+The **Results** section shows:
+
+- Maximum shear force
+- Maximum bending moment
+- Maximum deflection
+- Maximum axial force
+- Support reactions
+
+### 5. Read the diagrams
+
+The **Diagrams** section provides:
+
+- **SFD** — Shear Force Diagram
+- **BMD** — Bending Moment Diagram
+- **AFD** — Axial Force Diagram
+- **Deflection Diagram**
+- **Rotation / Slope**
+
+Important points, extrema, and genuine discontinuities are marked on the diagrams.
+
+**Rotation / slope is displayed in radians (rad).** It is an angular quantity, not a force, so it should not be labelled in kN or kip.
+
+### 6. Evaluate a point
+
+Use **Point of interest** to enter any beam position `x` and evaluate the corresponding analysis results at that location.
+
+### 7. Save, load, or share a model
+
+- **Save** stores the current model as JSON.
+- **Load** restores a previously saved JSON model.
+- **Share** creates a link containing the model data.
+- **Print calculation report** generates a printable report.
+
+## Units
+
+The toolbar provides two unit systems:
+
+- **SI:** m, kN, kN/m, kN·m, mm, GPa, mm⁴
+- **Imperial:** ft, kip, kip/ft, kip·ft, in
+
+Rotation/slope remains an angular quantity and is displayed in **radians**.
+
+Point-load **angle input is in degrees (°)**.
+
+## Tips
+
+- Keep all support and load positions within the total beam length.
+- For a point load or moment, enter its position in **Position / From**.
+- For a distributed load, make sure `To` is greater than `From`.
+- After changing a value, allow the analysis to finish before making another major change.
+- Use the built-in examples to quickly test common beam configurations.
+
+## Technology
+
+The analysis runs locally in the browser using the tool's built-in beam stiffness solver. The production app is a static site, so it can run on GitHub Pages without a backend service.
+
+## License
+
+No license has been specified for this repository.
+
+## Author
+
+**Md. Hasanuzzaman Himel**  
+RUET Civil Engineering
