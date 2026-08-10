@@ -11,17 +11,13 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">
-    <div class="logo"><img src="/logo.png?v=2" alt="Himel logo"></div>
-    <div><strong>Beam Analyzer by Himel</strong><small>SFD · BMD · AFD · Deflection</small></div>
-  </div>
+  <div class="brand"><div class="logo"><img src="/logo.png?v=2" alt="Himel logo"></div><div><strong>Beam Analyzer by Himel</strong><small>SFD · BMD · AFD · Deflection</small></div></div>
   <div class="toolbar">
     <button id="newBtn" class="iconBtn" title="New model"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New</span></button>
     <button id="saveBtn" class="iconBtn" title="Save model"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h10l3 3v13H6zM9 4v6h7V4M9 20v-6h7v6"/></svg><span>Save</span></button>
     <label class="fileBtn iconBtn" title="Load model"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg><span>Load</span><input id="loadInput" type="file" accept="application/json"></label>
     <button id="shareBtn" class="iconBtn" title="Copy share link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.2 1.2M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.2-1.2"/></svg><span>Share</span></button>
-    <span class="toolbarSep"></span>
-    <div class="unitBox" aria-label="Unit system"><button data-unit="SI" class="active">SI</button><button data-unit="imperial">Imperial</button></div>
+    <span class="toolbarSep"></span><div class="unitBox" aria-label="Unit system"><button data-unit="SI" class="active">SI</button><button data-unit="imperial">Imperial</button></div>
     <button id="themeBtn" class="iconOnly" title="Toggle theme"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.8 6.8 0 0 0 21 12.8z"/></svg></button>
   </div>
 </header>
@@ -52,4 +48,5 @@
 <script src="/internal-hinge-v1.js?v=1"></script>
 <script src="/sfd-jump-fix-v1.js?v=4"></script>
 <script src="/input-stability-fix-v1.js?v=2"></script>
+<script src="/solve-error-fix-v1.js?v=1"></script>
 </body></html>
