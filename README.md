@@ -99,7 +99,7 @@ The toolbar provides two unit systems:
 - **SI:** m, kN, kN/m, kN·m, mm, GPa, mm⁴
 - **Imperial:** ft, kip, kip/ft, kip·ft, in
 
-Rotation/slope remains an angular quantity and is displayed in **radians**.
+Rotation/slope is displayed in **radians** in either unit system.
 
 Point-load **angle input is in degrees (°)**.
 
@@ -108,16 +108,7 @@ Point-load **angle input is in degrees (°)**.
 - Keep all support and load positions within the total beam length.
 - For a point load or moment, enter its position in **Position / From**.
 - For a distributed load, make sure `To` is greater than `From`.
-- After changing a value, allow the analysis to finish before making another major change.
 - Use the built-in examples to quickly test common beam configurations.
-
-## Technology
-
-The analysis runs locally in the browser using the tool's built-in beam stiffness solver. The production app is a static site, so it can run on GitHub Pages without a backend service.
-
-## License
-
-No license has been specified for this repository.
 
 ## Author
 
