@@ -1,9 +1,22 @@
 # Deployment
 
-Deploy the project on a Node-capable host such as Render. Keep `STRUCTURECALCS_API_KEY` as a server environment variable. Do not put the secret in frontend JavaScript or a static GitHub Pages deployment.
+Beam Analyzer is now a static browser application and is deployed with **GitHub Pages**.
 
-Build command: `npm install`
-Start command: `npm start`
-Environment variables: `STRUCTURECALCS_API_KEY`, optionally `PORT`.
+## Production deployment
 
-The server proxies `/api/beam/solve` to StructureCalcs and never exposes the key to the browser.
+- Source frontend: `public/`
+- Deployment workflow: `.github/workflows/pages.yml`
+- Hosting: GitHub Pages
+- Solver: local deterministic Euler-Bernoulli direct-stiffness solver in the browser
+
+Every push to `main` publishes the `public/` frontend through GitHub Actions.
+
+## Local development
+
+The browser application can be served as static files from `public/`. The Node server in `server/` is retained for local/server compatibility, but production beam analysis no longer depends on it.
+
+No `STRUCTURECALCS_API_KEY` is required by the production frontend.
+
+## GitHub Pages settings
+
+In the repository settings, open **Pages** and set **Build and deployment → Source** to **GitHub Actions**.
