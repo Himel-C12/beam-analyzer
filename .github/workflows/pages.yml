@@ -27,10 +27,17 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      - name: Prepare static site
+        run: |
+          rm -rf _site
+          cp -R public _site
+          sed -i 's#href="/#href="./#g; s#src="/#src="./#g' _site/index.html
+          touch _site/.nojekyll
+
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./frontend
+          path: ./_site
 
       - name: Deploy
         id: deployment
