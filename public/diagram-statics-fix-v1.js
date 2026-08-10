@@ -52,7 +52,6 @@
       return l.q0*z+slope*z*z/2;
     }
 
-    // First moment of the distributed load about the section x.
     function qMomentAboutX(l,x){
       if(x<=l.a+EPS)return 0;
       const z=Math.min(x,l.b)-l.a;
@@ -88,13 +87,15 @@
     const shear=[],moment=[];
     const steps=16;
 
+    // Sample only the open part of each interval. The endpoint is added once
+    // below as the left/right value, preventing duplicate equal-valued points.
     for(let c=0;c<cuts.length-1;c++){
       const a=cuts[c],b=cuts[c+1],dx=b-a;
       if(dx<=EPS)continue;
-      for(let k=0;k<=steps;k++){
+      for(let k=0;k<steps;k++){
         if(c>0&&k===0)continue;
         const x=a+dx*k/steps;
-        const s=statAt(x,true);
+        const s=statAt(x,k===0);
         push(shear,x,s.V);push(moment,x,s.M);
       }
       const left=statAt(b,false),right=statAt(b,true);
