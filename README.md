@@ -4,11 +4,11 @@ A browser-based structural beam analyzer by **Md. Hasanuzzaman Himel (RUET CE' 2
 
 ## Current features
 
-- Automatic beam analysis through the StructureCalcs API.
+- Local browser-based beam analysis with a deterministic Euler-Bernoulli direct-stiffness solver.
 - SI and Imperial unit systems with in-place value conversion.
 - Pin, roller, and fixed supports.
-- **Internal hinges**: add an `Internal Hinge` from the Supports table. The hinge is a UI-level modeling object; before the solve request is sent, the affected span is split at the hinge and the span beginning at that location is sent with `connection: "hinge"`. The hinge itself is not sent as an external support, so it releases bending moment while transferring shear.
-- Multiple internal hinges are supported, including hinges inside a span and at existing span boundaries.
+- Internal hinges with released rotations.
+- Multiple spans and internal hinges.
 - Point loads, angular point loads, UDLs/linearly varying distributed loads, and applied moments.
 - Point-load angle input defaults to `0°`; non-zero angles use the vertical component for the current beam solver.
 - Clear engineering-style beam visualization with vertical load arrows and distinct support symbols.
@@ -23,32 +23,33 @@ A browser-based structural beam analyzer by **Md. Hasanuzzaman Himel (RUET CE' 2
 
 ## Solver
 
-Beam analysis is performed by the StructureCalcs API. The server keeps the API key private and proxies analysis requests from the browser.
+Beam analysis is performed locally in the browser. The solver uses an Euler-Bernoulli beam stiffness formulation with released rotations at internal hinges and a Gaussian elimination solve for the structural system.
 
-StructureCalcs supports multi-span beams with per-span `E`/`I` and internal hinge connections. Its API defines `connection: "hinge"` as an internal shear hinge that transfers shear and releases moment; the first span must remain `rigid`. urlStructureCalcs API documentationhttps://structurecalcs.com/api
-
-The Beam Analyzer uses a small fetch-boundary adapter (`public/internal-hinge-v2.js`) so the existing solver function sends the transformed, API-compatible model without duplicating the main analysis code.
+Normal beam analysis and internal-hinge analysis therefore do not require the StructureCalcs API or a server-side API key.
 
 ## Run locally
 
-1. Copy `.env.example` to `.env`.
-2. Put your private StructureCalcs key in `STRUCTURECALCS_API_KEY`.
-3. Run `npm install`.
-4. Run `npm start`.
-5. Open `http://localhost:3000`.
+The production frontend is the `public/` directory and can be served by any static HTTP server.
 
-Never commit `.env` or expose the API key in frontend code.
+The repository also retains the Node server for development/server compatibility:
+
+1. Run `npm install`.
+2. Run `npm start`.
+3. Open `http://localhost:3000`.
+
+No StructureCalcs API key is required for the current local solver path.
 
 ## Project structure
 
-- `public/` — production frontend served by the Node server.
-- `frontend/` — frontend source mirror.
-- `backend/` and `server/` — API proxy/server implementations.
-- `render.yaml` — Render deployment configuration.
+- `public/` — production static frontend.
+- `frontend/` — older frontend source mirror retained for reference.
+- `server/` — Node server retained for local/server compatibility.
+- `.github/workflows/pages.yml` — GitHub Pages deployment workflow.
+- `render.yaml` — legacy Render configuration retained but no longer required for production hosting.
 
 ## Deployment
 
-The project is deployed as a Node web service on Render. The production frontend is served from `public/`.
+The production site is deployed to GitHub Pages. GitHub Actions publishes `public/` on every push to `main`. GitHub Pages is a static hosting service, which fits the current browser-only solver architecture. citeturn0search2turn0search1
 
 ## Credits
 
