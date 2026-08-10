@@ -57,11 +57,11 @@ async function body(req) {
   catch { throw Object.assign(new Error('Request body must be valid JSON'), {status:400}); }
 }
 
-async function upstream(pathname, payload) {
+async function upstream(pathname, payload, signal) {
   const headers = {'Content-Type':'application/json', 'Accept':'application/json'};
   if (API_KEY) headers.Authorization = `Bearer ${API_KEY}`;
   return fetch(`${API}${pathname}`, {
-    method:'POST', headers, body:JSON.stringify(payload), signal:AbortSignal.timeout(20000)
+    method:'POST', headers, body:JSON.stringify(payload), signal
   });
 }
 
@@ -69,16 +69,55 @@ function safeSnippet(raw) {
   return String(raw || '').replace(/\s+/g,' ').trim().slice(0,500);
 }
 
+let activeSolve = null;
+const responseCache = new Map();
+const CACHE_TTL = 5000;
+
+function payloadKey(pathname, payload) {
+  return `${pathname}|${JSON.stringify(payload)}`;
+}
+
+function cached(key) {
+  const hit = responseCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.time > CACHE_TTL) {
+    responseCache.delete(key);
+    return null;
+  }
+  return hit;
+}
+
 async function proxy(req, res, pathname) {
+  let requestClosed = false;
+  let requestController = null;
+  let closeHandler = null;
+
   try {
     const payload = await body(req);
+    const key = payloadKey(pathname, payload);
+    const hit = cached(key);
+    if (hit) return json(res, hit.status, hit.data, hit.headers);
+
+    if (pathname === '/beam/solve') {
+      if (activeSolve?.controller) activeSolve.controller.abort();
+      requestController = new AbortController();
+      const timeout = setTimeout(() => requestController.abort(), 25000);
+      requestController.signal.addEventListener('abort', () => clearTimeout(timeout), {once:true});
+      activeSolve = {controller: requestController, key};
+    }
+
+    closeHandler = () => {
+      requestClosed = true;
+      requestController?.abort();
+    };
+    req.once('close', closeHandler);
+
     let r;
     let raw='';
-
-    // A transient 502/503/504 or HTML edge response can happen while an upstream
-    // service/container wakes up. Retry once before exposing the failure.
     for (let attempt=0; attempt<2; attempt++) {
-      r = await upstream(pathname, payload);
+      if (requestClosed) throw Object.assign(new Error('Client disconnected'), {name:'AbortError'});
+      const signal = requestController?.signal || AbortSignal.timeout(20000);
+      r = await upstream(pathname, payload, signal);
       raw = await r.text();
       const contentType = (r.headers.get('content-type') || '').toLowerCase();
       const looksJson = contentType.includes('json') || /^[\s]*[{[]/.test(raw);
@@ -95,13 +134,25 @@ async function proxy(req, res, pathname) {
     const looksJson = contentType.includes('json') || /^[\s]*[{[]/.test(raw);
 
     if (!looksJson) {
-      return json(res, r.status || 502, {
+      const data = {
         code:'upstream_non_json',
         detail:`StructureCalcs returned a non-JSON response (HTTP ${r.status}).`,
         upstreamStatus:r.status,
         upstreamContentType:r.headers.get('content-type') || 'unknown',
         upstreamBody:safeSnippet(raw)
-      }, headers);
+      };
+      return json(res, r.status || 502, data, headers);
+    }
+
+    if (r.ok && pathname === '/beam/solve') {
+      try {
+        const data = JSON.parse(raw);
+        responseCache.set(key,{time:Date.now(),status:r.status,data,headers});
+        if (responseCache.size > 20) {
+          const oldest=[...responseCache.entries()].sort((a,b)=>a[1].time-b[1].time)[0];
+          if (oldest) responseCache.delete(oldest[0]);
+        }
+      } catch {}
     }
 
     res.writeHead(r.status, {
@@ -111,10 +162,17 @@ async function proxy(req, res, pathname) {
     });
     res.end(raw);
   } catch (e) {
+    if (e.name === 'AbortError') {
+      if (!res.headersSent && !requestClosed) json(res, 499, {code:'request_aborted', detail:'Analysis superseded by a newer request.'});
+      return;
+    }
     json(res, e.status || 502, {
       code:e.status===400?'invalid_json':e.status===413?'payload_too_large':'upstream_unreachable',
       detail:e.message || 'Could not reach StructureCalcs.'
     });
+  } finally {
+    if (activeSolve?.controller === requestController) activeSolve = null;
+    if (closeHandler) req.removeListener('close', closeHandler);
   }
 }
 
