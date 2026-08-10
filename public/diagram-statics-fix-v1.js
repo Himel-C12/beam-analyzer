@@ -36,7 +36,6 @@
       a:n(l.from),b:n(l.to),q0:n(l.value??l.start??0),q1:n(l.value2??l.end??l.value??l.start??0)
     })).filter(l=>finite(l.a)&&finite(l.b)&&finite(l.q0)&&finite(l.q1)&&l.b>l.a+EPS);
 
-    // Include every location where the loading/reaction function can change.
     const cuts=uniqueSorted([0,L,
       ...supports.map(s=>n(s.position)),
       ...reactions.map(r=>r.x),
@@ -76,7 +75,7 @@
       for(const p of points){
         if(sideLess(p.x,x,right)){V+=p.f;M+=p.f*(x-p.x);}
       }
-      for(const l of udls){V+=qInt(l,x);M-=qMomentAboutX(l,x);}
+      for(const l of udls){V+=qInt(l,x);M+=qMomentAboutX(l,x);}
       for(const mm of moments){if(sideLess(mm.x,x,right))M+=mm.m;}
       return {V,M};
     }
@@ -89,9 +88,6 @@
     const shear=[],moment=[];
     const steps=16;
 
-    // Piecewise sampling. At a true vertical SFD jump, add two points at the
-    // same x. If the two values are equal, add only one point, so the curve
-    // remains literally continuous instead of containing a fake zero-width jump.
     for(let c=0;c<cuts.length-1;c++){
       const a=cuts[c],b=cuts[c+1],dx=b-a;
       if(dx<=EPS)continue;
