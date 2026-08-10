@@ -1,6 +1,7 @@
-/* Beam Analyzer — solve stability fix v2
- * Prevents duplicate/stale solves, retries only transient upstream failures,
- * and gives a useful error when the upstream worker is resource-limited.
+/* Beam Analyzer — solve stability fix v3
+ * Normalizes the UI load model into the schema expected by the local solver.
+ * The UI stores point/moment loads as value/from, but the old payload()
+ * function sent magnitude/position, which silently produced zero loads.
  */
 (function(){
   const transient=(status,data)=>{
@@ -10,6 +11,29 @@
            body.includes('temporarily unavailable') || body.includes('service unavailable');
   };
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+
+  function normalizeSolvePayload(p){
+    const out={...p};
+    out.loads=(p?.loads||[]).map(l=>{
+      const type=l?.type;
+      if(type==='point'){
+        const position=Number(l.position ?? l.from ?? 0);
+        const value=Number(l.magnitude ?? l.value ?? 0);
+        return {type:'point',value,value2:0,from:position,to:position};
+      }
+      if(type==='moment'){
+        const position=Number(l.position ?? l.from ?? 0);
+        const value=Number(l.magnitude ?? l.value ?? 0);
+        return {type:'moment',value,value2:0,from:position,to:position};
+      }
+      const from=Number(l.from ?? 0);
+      const to=Number(l.to ?? from);
+      const value=Number(l.start ?? l.value ?? 0);
+      const value2=Number(l.end ?? l.value2 ?? value);
+      return {type:'udl',value,value2,from,to};
+    });
+    return out;
+  }
 
   solveNow=async function(){
     const seq=++solveSeq;
@@ -24,7 +48,10 @@
     activeController=new AbortController();
     const controller=activeController;
     $('#error').classList.add('hidden');
-    const body=JSON.stringify(payload());
+
+    // payload() historically emitted magnitude/position and start/end.
+    // Convert those fields here so every solver receives one canonical schema.
+    const body=JSON.stringify(normalizeSolvePayload(payload()));
 
     try{
       setStatus('Solving…','busy');
