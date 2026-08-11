@@ -12,9 +12,7 @@
 
   function ensureAngles(){
     if(typeof model==='undefined'||!Array.isArray(model.loads))return;
-    model.loads.forEach(l=>{
-      if(l.type==='point'&&l.angle==null)l.angle=0;
-    });
+    model.loads.forEach(l=>{if(l.type==='point'&&l.angle==null)l.angle=0;});
   }
 
   const baseRenderInputs=window.renderInputs;
@@ -80,11 +78,9 @@
   }
 
   /*
-   * Do not rewrite fetch payloads here.
-   * The final payload-normalizer is the single place that converts an angular
-   * point load to F*cos(theta). Keeping one conversion layer avoids the old
-   * bug where one wrapper converted the value and a later wrapper restored the
-   * original magnitude.
+   * Conversion is intentionally NOT done in a fetch wrapper here.
+   * public/payload-normalizer-v1.js is the single conversion layer. This
+   * prevents multiple wrappers from converting or restoring the force.
    */
 
   function patchBeamDiagram(){
