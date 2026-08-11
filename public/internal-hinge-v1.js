@@ -1,35 +1,16 @@
 /* Beam Analyzer — internal hinge support adapter.
-   Internal hinges are represented in the UI as a support-type row, then mapped
-   to StructureCalcs' span connection: "hinge" at the hinge location.
+   Internal hinges are solver-native now. Keep them in the payload so the
+   released-rotation local stiffness solver can enforce M = 0 at each hinge.
 */
 (function(){
   const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
   const n=v=>Number(v);
   const EPS=1e-8;
-  const hingeLabel='Internal Hinge';
   const isHinge=s=>s?.type==='internal-hinge';
-  const hingePositions=()=>[...new Set((model.supports||[]).filter(isHinge).map(s=>n(s.position)).filter(Number.isFinite))].sort((a,b)=>a-b);
   const at=(a,b)=>Math.abs(a-b)<=EPS*Math.max(1,Math.abs(a),Math.abs(b));
 
-  function apiSpans(){
-    const hinges=hingePositions();
-    const out=[]; let start=0;
-    for(const original of model.spans||[]){
-      const end=start+n(original.length);
-      const cuts=[start,...hinges.filter(p=>p>start+EPS&&p<end-EPS),end];
-      for(let i=0;i<cuts.length-1;i++){
-        const a=cuts[i],b=cuts[i+1];
-        if(b-a<=EPS)continue;
-        out.push({length:b-a,E:n(original.E),I:n(original.I),connection:(out.length>0&&hinges.some(h=>at(h,a)))?'hinge':'rigid'});
-      }
-      start=end;
-    }
-    for(let i=1;i<out.length;i++){
-      let pos=0;
-      for(let j=0;j<i;j++)pos+=out[j].length;
-      if(hinges.some(h=>at(h,pos)))out[i].connection='hinge';
-    }
-    return out;
+  function hingePositions(){
+    return [...new Set((model.supports||[]).filter(isHinge).map(s=>n(s.position)).filter(Number.isFinite))].sort((a,b)=>a-b);
   }
 
   function installInput(){
@@ -39,7 +20,7 @@
       base();
       $$('#supportRows select[data-k="type"]').forEach(sel=>{
         if(!sel.querySelector('option[value="internal-hinge"]')){
-          const opt=document.createElement('option');opt.value='internal-hinge';opt.textContent=hingeLabel;sel.appendChild(opt);
+          const opt=document.createElement('option');opt.value='internal-hinge';opt.textContent='Internal Hinge';sel.appendChild(opt);
         }
         const id=sel.dataset.sup;
         const s=(model.supports||[]).find(x=>String(x.id)===String(id));
@@ -47,10 +28,9 @@
         const row=sel.closest('tr');
         const settlement=row?.querySelector('input[data-k="settlement"]');
         if(settlement){
-          const on=isHinge(s);
-          settlement.disabled=on;
-          settlement.title=on?'Internal hinges do not have support settlement.':'';
-          if(on)settlement.value=0;
+          settlement.disabled=isHinge(s);
+          settlement.title=isHinge(s)?'Internal hinges do not have support settlement.':'';
+          if(isHinge(s))settlement.value=0;
         }
       });
     }
@@ -63,8 +43,19 @@
     if(typeof base!=='function'||base.__internalHinge)return;
     function wrapped(){
       const p=base();
-      p.spans=apiSpans();
-      p.supports=(model.supports||[]).filter(s=>!isHinge(s)).map(s=>({type:s.type,position:n(s.position),settlement:n(s.settlement||0)}));
+      // Keep the original beam spans and keep internal-hinge rows in supports.
+      // The local solver identifies the hinge from this support type and creates
+      // independent rotations on either side of it.
+      p.supports=(model.supports||[]).map(s=>({
+        type:s.type,position:n(s.position),settlement:n(s.settlement||0)
+      }));
+      p.loads=(p.loads||[]).map((l,i)=>{
+        if(l?.type==='point'){
+          const src=(model.loads||[]).filter(x=>x.type==='point')[i];
+          return {...l,angle:n(src?.angle||0)};
+        }
+        return l;
+      });
       return p;
     }
     wrapped.__internalHinge=true;
@@ -80,7 +71,6 @@
       const hinges=hingePositions();
       hinges.forEach(p=>{if(p<=EPS||p>=L-EPS)errors.push(`Internal hinge at ${p} must be inside the beam, not at an end.`)});
       if(hinges.length!==new Set(hinges.map(p=>p.toFixed(8))).size)errors.push('Internal hinge positions must be unique.');
-      if(apiSpans().length>20)errors.push('Too many span segments after adding internal hinges (maximum 20).');
       return [...new Set(errors)];
     }
     wrapped.__internalHinge=true;
@@ -114,39 +104,14 @@
       if(!isHinge(s))return;
       hingeNo++;
       const xx=x(n(s.position));
-      const label=[...svg.querySelectorAll('.supportName')].find(t=>(t.textContent||'').startsWith(`S${idx+1} (`));
-      if(label){
-        label.textContent=`H${hingeNo} (Internal Hinge)`;
-        label.previousElementSibling?.style.setProperty('display','none');
-        label.previousElementSibling?.previousElementSibling?.style.setProperty('display','none');
-        label.previousElementSibling?.previousElementSibling?.previousElementSibling?.style.setProperty('display','none');
-      }
-      const posLabel=label?.nextElementSibling;
-      if(posLabel)posLabel.textContent=`@ ${typeof fmt==='function'?fmt(s.position):s.position} ${typeof unitText==='function'?unitText('length'):'m'}`;
+      const label=[...svg.querySelectorAll('.supportText')].find(t=>(t.textContent||'').includes(`${fmt(s.position)} `));
+      if(label)label.textContent=`H${hingeNo} (Internal Hinge) · ${fmt(s.position)} ${unitText('length')}`;
       const g=document.createElementNS('http://www.w3.org/2000/svg','g');
       g.setAttribute('class','internalHingeGraphic');
       g.innerHTML=`<circle cx="${xx}" cy="${by}" r="8" class="internalHingeCircle"/>
         <line x1="${xx-10}" y1="${by-7}" x2="${xx+10}" y2="${by-7}" class="internalHingeLine"/>
         <text x="${xx}" y="${by+58}" text-anchor="middle" class="internalHingeName">H${hingeNo} (Internal Hinge)</text>
-        <text x="${xx}" y="${by+73}" text-anchor="middle" class="internalHingePosition">@ ${typeof fmt==='function'?fmt(s.position):s.position} ${typeof unitText==='function'?unitText('length'):'m'}</text>`;
-      svg.appendChild(g);
-    });
-  }
-
-  function patchHingeDimensions(){
-    const canvas=$('#beamCanvas'),svg=canvas?.querySelector('svg');
-    if(!svg||typeof model==='undefined')return;
-    const dim=svg.querySelector('.dim');
-    if(!dim)return;
-    const ry=Number(dim.getAttribute('y1'));
-    svg.querySelectorAll('.internalHingeDim').forEach(e=>e.remove());
-    let no=0;
-    (model.supports||[]).filter(isHinge).forEach(s=>{
-      no++;
-      const total=Math.max(typeof len==='function'?n(len()):1,1);
-      const xx=70+Math.max(0,Math.min(total,n(s.position)))/total*(1280-140);
-      const g=document.createElementNS('http://www.w3.org/2000/svg','g');g.setAttribute('class','internalHingeDim');
-      g.innerHTML=`<line x1="${xx}" y1="${ry-7}" x2="${xx}" y2="${ry+7}" class="tick"/><text x="${xx}" y="${ry-14}" text-anchor="middle" class="dimLabel">H${no}</text><text x="${xx}" y="${ry+24}" text-anchor="middle" class="dimText">${typeof fmt==='function'?fmt(s.position):s.position} ${typeof unitText==='function'?unitText('length'):'m'}</text>`;
+        <text x="${xx}" y="${by+73}" text-anchor="middle" class="internalHingePosition">@ ${fmt(s.position)} ${unitText('length')}</text>`;
       svg.appendChild(g);
     });
   }
@@ -154,9 +119,9 @@
   function installBeamPatch(){
     const base=window.renderBeam;
     if(typeof base!=='function'||base.__internalHingeVisual)return;
-    function wrapped(){base();requestAnimationFrame(()=>{patchBeam();patchHingeDimensions()});}
+    function wrapped(){base();requestAnimationFrame(patchBeam)}
     wrapped.__internalHingeVisual=true;window.renderBeam=wrapped;
-    setTimeout(()=>{patchBeam();patchHingeDimensions()},0);
+    setTimeout(patchBeam,0);
   }
 
   installInput();installPayload();installValidate();installStyles();installBeamPatch();
