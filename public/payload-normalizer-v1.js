@@ -23,16 +23,14 @@
             const x=Number(l.position ?? l.from);
             const raw=Number(l.magnitude ?? l.value);
             const angleDeg=Number.isFinite(Number(l.angle)) ? Number(l.angle) : 0;
-            const vertical=Math.abs(angleDeg) < 1e-12
-              ? raw
-              : raw*Math.cos(angleDeg*Math.PI/180);
+            const vertical=raw*Math.cos(angleDeg*Math.PI/180);
 
-            out.value=vertical;
+            out.value=Number.isFinite(vertical)?vertical:raw;
             out.value2=0;
             out.from=x;
             out.to=x;
             out.position=x;
-            out.magnitude=vertical;
+            out.magnitude=out.value;
             delete out.angle;
             return out;
           }
