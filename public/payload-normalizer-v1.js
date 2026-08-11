@@ -1,7 +1,7 @@
 /* Beam Analyzer — final solve payload normalizer
- * The UI model uses value/from/to, while app.js historically emitted
- * StructureCalcs-style magnitude/position (and start/end for UDL).
- * Normalize the outgoing request before it reaches either local or API solver.
+ * Normalize the saved UI model into the solver payload.
+ * Angular point loads are reduced to their vertical component here so
+ * later payload transforms cannot accidentally restore the original force.
  */
 (function(){
   'use strict';
@@ -18,7 +18,26 @@
       if(Array.isArray(p.loads)){
         p.loads=p.loads.map(l=>{
           const out={...l};
-          if(l.type==='point' || l.type==='moment'){
+
+          if(l.type==='point'){
+            const x=Number(l.position ?? l.from);
+            const raw=Number(l.magnitude ?? l.value);
+            const angleDeg=Number.isFinite(Number(l.angle)) ? Number(l.angle) : 0;
+            const vertical=Math.abs(angleDeg) < 1e-12
+              ? raw
+              : raw*Math.cos(angleDeg*Math.PI/180);
+
+            out.value=vertical;
+            out.value2=0;
+            out.from=x;
+            out.to=x;
+            out.position=x;
+            out.magnitude=vertical;
+            delete out.angle;
+            return out;
+          }
+
+          if(l.type==='moment'){
             const x=Number(l.position ?? l.from);
             const v=Number(l.magnitude ?? l.value);
             out.value=v;
@@ -27,19 +46,26 @@
             out.position=x;
             out.magnitude=v;
             out.value2=0;
-          }else if(l.type==='udl'){
+            return out;
+          }
+
+          if(l.type==='udl'){
             const q0=Number(l.start ?? l.value);
             const q1=Number(l.end ?? l.value2 ?? q0);
             out.value=q0;
             out.value2=q1;
             out.from=Number(l.from);
             out.to=Number(l.to);
+            return out;
           }
+
           return out;
         });
       }
+
       return upstream(input,{...init,body:JSON.stringify(p)});
     }catch(error){
+      console.warn('Beam Analyzer payload normalizer:',error);
       return upstream(input,init);
     }
   };
