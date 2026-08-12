@@ -63,6 +63,16 @@
       .logo img{width:100%;height:100%;object-fit:contain;display:block}
       #supportRows select[data-k="type"]{min-width:138px}
       #supportRows input[data-k="settlement"]:disabled{opacity:.45;cursor:not-allowed}
+
+      /* An internal hinge is NOT a support. Remove the normal support symbol
+         drawn by app.js and leave only the hinge joint on the beam. */
+      #beamCanvas .supportDrag[data-id] .supportTriangle,
+      #beamCanvas .supportDrag[data-id] .rollerWheel,
+      #beamCanvas .supportDrag[data-id] .groundLine,
+      #beamCanvas .supportDrag[data-id] .hatch,
+      #beamCanvas .supportDrag[data-id] .fixedWall,
+      #beamCanvas .supportDrag[data-id] .beamConnector{display:none!important}
+
       #beamCanvas .internalHingeCircle{fill:var(--card);stroke:var(--text);stroke-width:2;vector-effect:non-scaling-stroke}
       #beamCanvas .internalHingeLine{stroke:var(--text);stroke-width:1.4;vector-effect:non-scaling-stroke}
       #beamCanvas .internalHingeName{fill:var(--text);font-size:12px;font-weight:600}
@@ -76,12 +86,17 @@
     const canvas=$('#beamCanvas'),svg=canvas?.querySelector('svg');
     if(!svg||typeof model==='undefined')return;
     svg.querySelectorAll('.internalHingeGraphic').forEach(e=>e.remove());
-    const pad=70,by=125,total=Math.max(typeof len==='function'?n(len()):1,1),x=p=>pad+Math.max(0,Math.min(total,p))/total*(1280-2*pad);
+
+    // Match app.js renderBeam coordinates exactly: 1200×370, beam centre y=112.
+    const W=1200,pad=72,by=112,total=Math.max(typeof len==='function'?n(len()):1,1);
+    const x=p=>pad+Math.max(0,Math.min(total,p))/total*(W-2*pad);
     let hingeNo=0;
+
     (model.supports||[]).forEach(s=>{
       if(!isHinge(s))return;
       const xx=x(n(s.position));hingeNo++;
-      const g=document.createElementNS('http://www.w3.org/2000/svg','g');g.setAttribute('class','internalHingeGraphic');
+      const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+      g.setAttribute('class','internalHingeGraphic');
       g.innerHTML=`<circle cx="${xx}" cy="${by}" r="8" class="internalHingeCircle"/><line x1="${xx-10}" y1="${by-7}" x2="${xx+10}" y2="${by-7}" class="internalHingeLine"/><text x="${xx}" y="${by+58}" text-anchor="middle" class="internalHingeName">H${hingeNo} (Internal Hinge)</text><text x="${xx}" y="${by+73}" text-anchor="middle" class="internalHingePosition">@ ${fmt(s.position)} ${unitText('length')}</text>`;
       svg.appendChild(g);
     });
