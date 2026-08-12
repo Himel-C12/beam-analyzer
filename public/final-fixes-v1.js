@@ -18,6 +18,23 @@
     });
   }
 
+  /* Keep the point-load angle in the payload before the older payload
+     normalizer converts it to the vertical component. */
+  const basePayload=window.payload;
+  if(typeof basePayload==='function'){
+    window.payload=function(){
+      const p=basePayload();
+      if(Array.isArray(p.loads)&&typeof model!=='undefined'){
+        p.loads=p.loads.map((l,i)=>{
+          if(l.type!=='point')return l;
+          const src=model.loads?.[i];
+          return {...l,angle:angle(src)};
+        });
+      }
+      return p;
+    };
+  }
+
   /* ------------------------------------------------------------------
    * 1. Load table: always render exactly the same 8 cells as the header.
    * ------------------------------------------------------------------ */
@@ -104,8 +121,7 @@
 
     function qArea(q,x){
       const lo=q.a,hi=Math.min(x,q.b); if(hi<=lo+EPS)return 0;
-      const m=(q.q1-q.q0)/(q.b-q.a);
-      const z=hi-lo;
+      const m=(q.q1-q.q0)/(q.b-q.a),z=hi-lo;
       return q.q0*z+m*z*z/2;
     }
     function leftV(x,strict){
@@ -123,10 +139,7 @@
       if(b-a<=EPS)continue;
       push(a,leftV(a,false));
       const steps=12;
-      for(let k=1;k<steps;k++){
-        const x=a+(b-a)*k/steps;
-        push(x,leftV(x,false));
-      }
+      for(let k=1;k<steps;k++)push(a+(b-a)*k/steps,leftV(a+(b-a)*k/steps,false));
       const vl=leftV(b,true),vr=leftV(b,false);
       push(b,vl);
       if(Math.abs(vl-vr)>1e-8)push(b,vr);
@@ -143,8 +156,7 @@
   function forceSfdVisible(){
     if(typeof result==='undefined'||!result)return;
     result.diagrams=result.diagrams||{};
-    let series=result.diagrams.shear;
-    if(!shearLooksValid(series)){
+    if(!shearLooksValid(result.diagrams.shear)){
       const rebuilt=rebuildShear();
       if(rebuilt.length)result.diagrams.shear=rebuilt;
     }
@@ -163,9 +175,9 @@
     const ys=s.map(p=>p.y),r=Math.max(Math.abs(Math.min(...ys)),Math.abs(Math.max(...ys)),1e-9);
     const min=Math.min(0,Math.min(...ys)-r*.06),max=Math.max(0,Math.max(...ys)+r*.06);
     const sx=x=>pad+(x/L)*(w-2*pad), sy=y=>h-pad-(y-min)/(max-min||1)*(h-2*pad);
-    let d='M '+sx(s[0].x).toFixed(1)+' '+sy(s[0].y).toFixed(1);
-    for(let i=1;i<s.length;i++)d+=' L '+sx(s[i].x).toFixed(1)+' '+sy(s[i].y).toFixed(1);
-    let area=`M ${sx(s[0].x)} ${sy(0)} L `+s.map(p=>`${sx(p.x)} ${sy(p.y)}`).join(' L ')+` L ${sx(s[s.length-1].x)} ${sy(0)} Z`;
+    let d=`M ${sx(s[0].x).toFixed(1)} ${sy(s[0].y).toFixed(1)}`;
+    for(let i=1;i<s.length;i++)d+=` L ${sx(s[i].x).toFixed(1)} ${sy(s[i].y).toFixed(1)}`;
+    const area=`M ${sx(s[0].x)} ${sy(0)} L ${s.map(p=>`${sx(p.x)} ${sy(p.y)}`).join(' L ')} L ${sx(s[s.length-1].x)} ${sy(0)} Z`;
 
     svg.dataset.series=JSON.stringify(s.map(p=>[p.x,p.y]));
     svg.dataset.min=String(min);svg.dataset.max=String(max);svg.dataset.len=String(L);
@@ -187,7 +199,6 @@
     requestAnimationFrame(forceSfdVisible);
   };
 
-  /* Make the load table stable even if an older patch re-renders it. */
   const style=document.createElement('style');
   style.textContent=`
     #loadRows td,#loadRows th{vertical-align:middle}
