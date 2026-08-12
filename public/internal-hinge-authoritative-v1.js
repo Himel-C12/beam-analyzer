@@ -1,66 +1,76 @@
-/* Beam Analyzer — authoritative internal-hinge renderer.
- * Fixes the root renderer, rather than drawing over the native Pin symbol.
- * Loaded last so the app's own renderBeam() uses this supportSvg().
- */
+/* Beam Analyzer — final DOM-authoritative internal-hinge renderer. */
 (function(){
   'use strict';
   const NS='http://www.w3.org/2000/svg';
-  const originalSupportSvg=window.supportSvg;
+  const q=s=>document.querySelector(s);
+  const qa=s=>[...document.querySelectorAll(s)];
+  const num=v=>Number(v);
 
-  window.supportSvg=function(s,x,y){
-    if(s && s.type==='internal-hinge'){
-      return `<g class="internalHingeNative" pointer-events="none">
-        <circle cx="${x}" cy="${y}" r="10" fill="#fff" stroke="#35a873" stroke-width="2.5"/>
-        <circle cx="${x}" cy="${y}" r="4.5" fill="none" stroke="#35a873" stroke-width="2"/>
-      </g>`;
-    }
-    return originalSupportSvg(s,x,y);
-  };
+  function hingeRows(){
+    return qa('#supportRows tr').map((tr,index)=>{
+      const sel=tr.querySelector('select[data-k="type"]');
+      const pos=tr.querySelector('input[data-k="position"]');
+      const label=(sel?.value||'')+' '+(sel?.selectedOptions?.[0]?.textContent||'');
+      if(!/hinge/i.test(label)) return null;
+      return {index, id:sel?.dataset?.sup, position:num(pos?.value)};
+    }).filter(x=>x && Number.isFinite(x.position));
+  }
 
-  const originalRenderBeam=window.renderBeam;
-  window.renderBeam=function(){
-    originalRenderBeam();
-    const canvas=document.querySelector('#beamCanvas');
-    const svg=canvas?.querySelector('svg');
-    if(!svg)return;
+  function repair(){
+    const svg=q('#beamCanvas svg');
+    const beam=svg?.querySelector('.beamLine');
+    if(!svg||!beam)return;
 
-    const rows=[...document.querySelectorAll('#supportRows select[data-sup][data-k="type"]')]
-      .filter(e=>e.value==='internal-hinge');
+    svg.querySelectorAll('.final-internal-hinge').forEach(e=>e.remove());
+    const hinges=hingeRows();
+    if(!hinges.length)return;
 
-    rows.forEach((sel,index)=>{
-      const id=String(sel.dataset.sup);
-      const group=svg.querySelector(`g.supportDrag[data-id="${CSS.escape(id)}"]`);
-      if(!group)return;
+    const x1=num(beam.getAttribute('x1')), x2=num(beam.getAttribute('x2'));
+    const y=num(beam.getAttribute('y1'));
+    const lengths=qa('#spanRows input[data-k="length"]').map(e=>num(e.value)).filter(Number.isFinite);
+    const L=lengths.reduce((a,b)=>a+b,0);
+    if(!(L>0))return;
 
-      group.querySelectorAll('.supportBadge,.supportNumber,.supportText,.supportTriangle,.rollerWheel,.groundLine,.hatch,.fixedWall,.beamConnector').forEach(e=>e.remove());
+    hinges.forEach((h,hi)=>{
+      const x=x1+(h.position/L)*(x2-x1);
+      let group=null;
+      if(h.id) group=svg.querySelector(`g.supportDrag[data-id="${CSS.escape(String(h.id))}"]`);
+      if(!group){
+        const groups=qa('#beamCanvas svg g.supportDrag');
+        group=groups[h.index]||null;
+      }
+      if(group)group.style.display='none';
 
-      const hinge=group.querySelector('.internalHingeNative');
-      if(!hinge)return;
+      const g=document.createElementNS(NS,'g');
+      g.setAttribute('class','final-internal-hinge');
+      g.setAttribute('pointer-events','none');
 
-      const circle=hinge.querySelector('circle');
-      const x=Number(circle?.getAttribute('cx'));
-      const y=Number(circle?.getAttribute('cy'));
-      if(!Number.isFinite(x)||!Number.isFinite(y))return;
+      const outer=document.createElementNS(NS,'circle');
+      outer.setAttribute('cx',x); outer.setAttribute('cy',y); outer.setAttribute('r','10');
+      outer.setAttribute('fill','white'); outer.setAttribute('stroke','#35a873'); outer.setAttribute('stroke-width','2.5');
+      g.appendChild(outer);
+
+      const inner=document.createElementNS(NS,'circle');
+      inner.setAttribute('cx',x); inner.setAttribute('cy',y); inner.setAttribute('r','4.5');
+      inner.setAttribute('fill','none'); inner.setAttribute('stroke','#35a873'); inner.setAttribute('stroke-width','2');
+      g.appendChild(inner);
 
       const label=document.createElementNS(NS,'text');
-      label.setAttribute('x',x);label.setAttribute('y',y+40);
-      label.setAttribute('text-anchor','middle');
-      label.setAttribute('class','supportText');
-      label.textContent=`H${index+1} (Internal Hinge)`;
-      group.appendChild(label);
+      label.setAttribute('x',x); label.setAttribute('y',y+40); label.setAttribute('text-anchor','middle');
+      label.setAttribute('class','supportText'); label.textContent=`H${hi+1} (Internal Hinge)`; g.appendChild(label);
 
-      const pos=document.querySelector(`#supportRows select[data-sup="${CSS.escape(id)}"]`)
-        ?.closest('tr')?.querySelector('input[data-k="position"]')?.value;
-      const p=document.createElementNS(NS,'text');
-      p.setAttribute('x',x);p.setAttribute('y',y+56);
-      p.setAttribute('text-anchor','middle');
-      p.setAttribute('class','supportText');
-      p.textContent=`@ ${pos ?? ''} ${typeof unitText==='function'?unitText('length'):''}`.trim();
-      group.appendChild(p);
+      const pos=document.createElementNS(NS,'text');
+      pos.setAttribute('x',x); pos.setAttribute('y',y+56); pos.setAttribute('text-anchor','middle');
+      pos.setAttribute('class','supportText'); pos.textContent=`@ ${h.position} m`; g.appendChild(pos);
+
+      svg.appendChild(g);
     });
-  };
+  }
 
-  // app.js already performed its initial render before this last script loaded.
-  // Render once now so the authoritative supportSvg is actually used immediately.
-  window.renderBeam();
+  const style=document.createElement('style');
+  style.textContent='.beamCanvas g.final-internal-hinge{display:inline!important}.beamCanvas g.supportDrag[style*="display: none"]{display:none!important}';
+  document.head.appendChild(style);
+
+  [0,100,250,500,1000,2000,4000].forEach(t=>setTimeout(repair,t));
+  setInterval(repair,500);
 })();
