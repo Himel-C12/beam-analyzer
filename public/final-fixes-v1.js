@@ -1,309 +1,216 @@
-/* Beam Analyzer — consolidated final stability/diagram pass.
- *
- * This is intentionally the last browser patch in the page. Older v1/v2/v3
- * fixes are left in place for compatibility, but this layer owns the final
- * payload, input and diagram normalization so later wrappers cannot undo it.
+/* Beam Analyzer — final UI/diagram corrections.
+ * Loaded last so it owns the final rendered state.
  */
 (function(){
   'use strict';
+  const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+  const n=v=>Number(v), finite=v=>Number.isFinite(n(v));
+  const EPS=1e-9;
 
-  const $=s=>document.querySelector(s);
-  const $$=s=>[...document.querySelectorAll(s)];
-  const num=v=>Number(v);
-  const finite=v=>Number.isFinite(num(v));
-  const EPS=1e-7;
-
-  function safeAngle(v){
-    const n=num(v);
-    return Number.isFinite(n)?n:0;
-  }
-
-  function ensureModelShape(){
-    if(typeof model==='undefined'||!Array.isArray(model.loads))return;
-    model.loads.forEach(l=>{
-      if(!l)return;
-      if(l.type==='point' && l.angle==null)l.angle=0;
-      if(l.type==='point' && l.to==null)l.to=l.from;
+  function angle(l){const a=n(l?.angle);return Number.isFinite(a)?a:0}
+  function ensureModel(){
+    if(typeof model==='undefined')return;
+    (model.loads||[]).forEach(l=>{
+      if(l.type==='point'){
+        if(l.angle==null)l.angle=0;
+        if(l.to==null)l.to=l.from;
+      }
     });
   }
 
-  /* Keep point-load angle in the actual model and expose it in the table. */
-  const baseRenderInputs=window.renderInputs;
-  if(typeof baseRenderInputs==='function'){
-    window.renderInputs=function(){
-      ensureModelShape();
-      baseRenderInputs();
+  /* ------------------------------------------------------------------
+   * 1. Load table: always render exactly the same 8 cells as the header.
+   * ------------------------------------------------------------------ */
+  function renderLoadTable(){
+    if(typeof model==='undefined')return;
+    const table=$('#loadRows')?.closest('table');
+    const body=$('#loadRows');
+    if(!table||!body)return;
 
-      const table=$('#loadRows')?.closest('table');
-      const head=table?.querySelector('thead tr');
-      if(head && ![...head.children].some(th=>/angle/i.test(th.textContent||''))){
-        const th=document.createElement('th');
-        th.textContent='Angle (°)';
-        const value2=[...head.children].find(th=>/Value 2/i.test(th.textContent||''));
-        if(value2)value2.before(th); else head.appendChild(th);
-      }
+    table.querySelector('thead').innerHTML=`<tr>
+      <th>#</th><th>Type</th><th>Value</th><th>Value 2 (UDL)</th>
+      <th>Angle (°)</th><th>Position / From</th><th>To (UDL)</th><th></th>
+    </tr>`;
 
-      $$('#supportRows select[data-k="type"]').forEach(select=>{
-        if(![...select.options].some(o=>o.value==='internal-hinge')){
-          const opt=document.createElement('option');
-          opt.value='internal-hinge';
-          opt.textContent='Internal hinge';
-          select.appendChild(opt);
-        }
-        const sid=select.dataset.sup;
-        const support=(typeof model!=='undefined'&&Array.isArray(model.supports))
-          ?model.supports.find(s=>String(s.id)===String(sid)):null;
-        if(support)select.value=support.type;
-      });
+    body.innerHTML=(model.loads||[]).map(l=>{
+      const point=l.type==='point', moment=l.type==='moment', range=!point&&!moment;
+      return `<tr>
+        <td>${l.id}</td>
+        <td><select data-final-load="${l.id}" data-k="type">
+          <option value="point" ${point?'selected':''}>Point</option>
+          <option value="udl" ${l.type==='udl'?'selected':''}>UDL / varying</option>
+          <option value="moment" ${moment?'selected':''}>Moment</option>
+        </select></td>
+        <td><input data-final-load="${l.id}" data-k="value" type="number" step="any" value="${l.value}"></td>
+        <td>${range?`<input data-final-load="${l.id}" data-k="value2" type="number" step="any" value="${l.value2??0}">`:'<span class="tableDash">—</span>'}</td>
+        <td>${point?`<input data-final-load="${l.id}" data-k="angle" type="number" step="any" value="${angle(l)}" title="Angle from vertical">`:'<span class="tableDash">—</span>'}</td>
+        <td><input data-final-load="${l.id}" data-k="from" type="number" step="any" value="${l.from}" aria-label="${point||moment?'Position':'From'}"></td>
+        <td>${range?`<input data-final-load="${l.id}" data-k="to" type="number" step="any" value="${l.to??l.from}" aria-label="To">`:'<span class="tableDash">—</span>'}</td>
+        <td><button class="remove" data-final-del-load="${l.id}">×</button></td>
+      </tr>`;
+    }).join('');
 
-      $$('#loadRows tr').forEach(row=>{
-        const select=row.querySelector('select[data-k="type"]');
-        const idEl=row.querySelector('[data-load]');
-        const id=idEl?.dataset.load;
-        const load=(typeof model!=='undefined'&&Array.isArray(model.loads))
-          ?model.loads.find(l=>String(l.id)===String(id)):null;
-        if(!load)return;
-
-        let cell=row.querySelector('[data-final-angle-cell]');
-        if(!cell){
-          cell=document.createElement('td');
-          cell.dataset.finalAngleCell='1';
-          const valueCell=row.querySelector('input[data-k="value"]')?.closest('td');
-          const value2Cell=row.querySelector('input[data-k="value2"]')?.closest('td');
-          if(value2Cell)value2Cell.before(cell);
-          else if(valueCell)valueCell.after(cell);
-          else if(select?.closest('td'))select.closest('td').after(cell);
-          else row.appendChild(cell);
-        }
-
-        cell.innerHTML='';
-        if(load.type==='point'){
-          const input=document.createElement('input');
-          input.type='number';
-          input.step='any';
-          input.value=safeAngle(load.angle);
-          input.dataset.finalAngle='1';
-          input.title='Angle from the vertical load direction. 0° = vertical.';
-          input.setAttribute('aria-label','Point load angle in degrees');
-          input.style.minWidth='72px';
-          input.addEventListener('change',()=>{
-            if(typeof mutate!=='function')return;
-            mutate(()=>{
-              const l=model.loads.find(x=>String(x.id)===String(id));
-              if(l)l.angle=safeAngle(input.value);
-            });
-          });
-          cell.appendChild(input);
-        }else{
-          cell.innerHTML='<span style="color:var(--muted)">—</span>';
-        }
-      });
-
-      ensureModelShape();
-    };
-  }
-
-  /* Fix angular point-load graphics using the renderer's real class names. */
-  const baseRenderBeam=window.renderBeam;
-  if(typeof baseRenderBeam==='function'){
-    window.renderBeam=function(){
-      baseRenderBeam();
-      requestAnimationFrame(()=>{
-        const canvas=$('#beamCanvas');
-        const svg=canvas?.querySelector('svg');
-        if(!svg||typeof model==='undefined')return;
-
-        const pointLoads=(model.loads||[]).filter(l=>l.type==='point');
-        const arrows=[...svg.querySelectorAll('.pointLoad')];
-        const labels=[...svg.querySelectorAll('.loadText.redText')];
-
-        pointLoads.forEach((l,i)=>{
-          const angle=safeAngle(l.angle);
-          const arrow=arrows[i];
-          const label=labels[i];
-          if(!arrow)return;
-
-          const x2=num(arrow.getAttribute('x2'));
-          const y2=num(arrow.getAttribute('y2'));
-          if(finite(x2)&&finite(y2)){
-            arrow.setAttribute('transform',Math.abs(angle)>EPS
-              ?`rotate(${angle} ${x2} ${y2})`:'' );
-          }
-
-          if(label){
-            const raw=String(Math.abs(num(l.value)));
-            label.textContent=Math.abs(angle)>EPS
-              ?`${raw} ${typeof unitText==='function'?unitText('force'):'kN'} @ ${Math.abs(angle)}°`
-              :`${raw} ${typeof unitText==='function'?unitText('force'):'kN'}`;
+    $$('[data-final-load]').forEach(el=>{
+      el.onchange=()=>{
+        if(typeof mutate!=='function')return;
+        const id=el.dataset.finalLoad;
+        mutate(()=>{
+          const l=model.loads.find(x=>String(x.id)===String(id));
+          if(!l)return;
+          if(el.dataset.k==='type'){
+            l.type=el.value;
+            if(l.type==='point'||l.type==='moment'){
+              l.to=l.from;
+              l.value2=0;
+              if(l.type==='point'&&l.angle==null)l.angle=0;
+            }
+          }else if(el.dataset.k==='angle'){
+            l.angle=Number.isFinite(n(el.value))?n(el.value):0;
+          }else{
+            l[el.dataset.k]=n(el.value);
+            if((l.type==='point'||l.type==='moment')&&el.dataset.k==='from')l.to=l.from;
           }
         });
-
-        /* Internal hinges are releases, not external supports. */
-        (model.supports||[]).filter(s=>s.type==='internal-hinge').forEach(s=>{
-          const g=svg.querySelector(`g[data-id="${CSS.escape(String(s.id))}"]`);
-          if(!g)return;
-          g.querySelectorAll('.supportTriangle,.rollerWheel,.groundLine,.hatch,.fixedWall,.beamConnector')
-            .forEach(el=>el.remove());
-
-          const badge=g.querySelector('.supportBadge');
-          const cx=badge?num(badge.getAttribute('cx')):0;
-          const cy=badge?num(badge.getAttribute('cy'))+4:108;
-          const ns='http://www.w3.org/2000/svg';
-
-          const circle=document.createElementNS(ns,'circle');
-          circle.setAttribute('cx',String(cx));
-          circle.setAttribute('cy',String(cy));
-          circle.setAttribute('r','10');
-          circle.setAttribute('class','internalHingeSymbol');
-          g.insertBefore(circle,g.firstChild);
-
-          const line=document.createElementNS(ns,'line');
-          line.setAttribute('x1',String(cx-15));
-          line.setAttribute('x2',String(cx+15));
-          line.setAttribute('y1',String(cy+15));
-          line.setAttribute('y2',String(cy+15));
-          line.setAttribute('class','groundLine');
-          g.insertBefore(line,g.firstChild);
-
-          const text=[...g.querySelectorAll('.supportText')][0];
-          if(text)text.textContent=`Internal hinge · ${fmt(s.position)} ${unitText('length')}`;
-        });
-      });
-    };
-  }
-
-  /* Preserve angular point-load information before the existing normalizer. */
-  const upstreamFetch=window.fetch.bind(window);
-  window.fetch=async function(input,init){
-    const url=typeof input==='string' ? input : (input&&input.url)||'';
-    if(!url.includes('/api/beam/solve') || !init || typeof init.body!=='string'){
-      return upstreamFetch(input,init);
-    }
-
-    let outgoing=init;
-    try{
-      const p=JSON.parse(init.body);
-      ensureModelShape();
-      if(Array.isArray(p.loads) && typeof model!=='undefined'){
-        p.loads=p.loads.map((l,i)=>{
-          const src=Array.isArray(model.loads)?model.loads[i]:null;
-          if(l?.type==='point'){
-            return {
-              ...l,
-              angle:safeAngle(src?.angle),
-              position:num(l.position??l.from),
-              from:num(l.from??l.position),
-              to:num(l.to??l.position),
-              magnitude:num(l.magnitude??l.value)
-            };
-          }
-          return l;
-        });
-      }
-      outgoing={...init,body:JSON.stringify(p)};
-    }catch(e){
-      console.warn('Beam Analyzer final payload pass:',e);
-    }
-
-    const response=await upstreamFetch(input,outgoing);
-
-    /* Repair equal-x SFD/BMD jump ordering after all upstream diagram patches. */
-    try{
-      const data=await response.clone().json();
-      const loads=(typeof model!=='undefined'&&Array.isArray(model.loads))?model.loads:[];
-      const points=loads.filter(l=>l.type==='point').map(l=>num(l.from)).filter(finite);
-      const moments=loads.filter(l=>l.type==='moment').map(l=>num(l.from)).filter(finite);
-
-      const repair=(series,positions)=>{
-        if(!Array.isArray(series)||series.length<2||!positions.length)return series;
-        let out=series.map(p=>Array.isArray(p)
-          ?[num(p[0]),num(p[1])]
-          :[num(p?.x??p?.position),num(p?.y??p?.value)])
-          .filter(p=>finite(p[0])&&finite(p[1]));
-
-        for(const x of [...new Set(positions)]){
-          let left=null,right=null;
-          for(const p of out){
-            if(p[0]<x-EPS && (!left||p[0]>left[0]))left=p;
-            if(p[0]>x+EPS && (!right||p[0]<right[0]))right=p;
-          }
-          if(!left||!right)continue;
-          out=out.filter(p=>Math.abs(p[0]-x)>EPS);
-          out.push([x,left[1]],[x,right[1]]);
-        }
-
-        return out.map((p,i)=>({p,i})).sort((a,b)=>{
-          const dx=a.p[0]-b.p[0];
-          return Math.abs(dx)>EPS?dx:a.i-b.i;
-        }).map(x=>x.p);
       };
+    });
+    $$('[data-final-del-load]').forEach(b=>b.onclick=()=>mutate(()=>{
+      model.loads=model.loads.filter(l=>String(l.id)!==String(b.dataset.finalDelLoad));
+    }));
+  }
 
-      if(data?.diagrams){
-        data.diagrams.shear=repair(data.diagrams.shear,points);
-        data.diagrams.moment=repair(data.diagrams.moment,moments);
-      }
-
-      return new Response(JSON.stringify(data),{
-        status:response.status,
-        statusText:response.statusText,
-        headers:new Headers(response.headers)
-      });
-    }catch(e){
-      return response;
-    }
+  const baseInputs=window.renderInputs;
+  window.renderInputs=function(){
+    if(typeof baseInputs==='function')baseInputs();
+    ensureModel();
+    renderLoadTable();
   };
 
-  function patchCharts(){
-    const charts=$('#charts');
-    if(!charts)return;
-    charts.querySelectorAll('svg[data-kind]').forEach(svg=>{
-      const kind=svg.dataset.kind;
-      if(kind!=='shear'&&kind!=='moment')return;
-      let series;
-      try{series=JSON.parse(svg.dataset.series||'[]')}catch{return}
-      if(!Array.isArray(series)||series.length<2)return;
+  /* ------------------------------------------------------------------
+   * 2. SFD: rebuild the shear series from reactions + model loads when
+   *    the returned/previously patched series is missing or broken.
+   * ------------------------------------------------------------------ */
+  function rebuildShear(){
+    if(typeof model==='undefined'||typeof result==='undefined'||!result)return[];
+    const L=typeof len==='function'?len():0;
+    const reactions=Array.isArray(result.reactions)?result.reactions.map(r=>({x:n(r.position),v:n(r.vertical??r.v??0)})).filter(r=>finite(r.x)&&finite(r.v)):[];
+    if(!(L>0)||!reactions.length)return[];
 
-      const arr=series.map(p=>({
-        x:num(Array.isArray(p)?p[0]:p?.x),
-        y:num(Array.isArray(p)?p[1]:p?.y)
-      })).filter(p=>finite(p.x)&&finite(p.y));
-      const positions=(typeof model!=='undefined'&&Array.isArray(model.loads))
-        ?model.loads.filter(l=>kind==='shear'?l.type==='point':l.type==='moment')
-          .map(l=>num(l.from)).filter(finite):[];
+    const loads=(model.loads||[]);
+    const points=loads.filter(l=>l.type==='point').map(l=>({x:n(l.from),v:n(l.value)*Math.cos(angle(l)*Math.PI/180)})).filter(p=>finite(p.x)&&finite(p.v));
+    const udls=loads.filter(l=>l.type==='udl').map(l=>({a:n(l.from),b:n(l.to),q0:n(l.value),q1:n(l.value2??l.value)})).filter(l=>finite(l.a)&&finite(l.b)&&l.b>l.a+EPS);
+    const cuts=[0,L,...reactions.map(r=>r.x),...points.map(p=>p.x),...udls.flatMap(q=>[q.a,q.b])]
+      .filter(finite).map(x=>Math.max(0,Math.min(L,x))).sort((a,b)=>a-b)
+      .filter((x,i,a)=>i===0||Math.abs(x-a[i-1])>EPS);
 
-      for(const x of positions){
-        const same=arr.map((p,i)=>({p,i})).filter(o=>Math.abs(o.p.x-x)<=EPS);
-        if(same.length<2)continue;
-        const left=arr.filter(p=>p.x<x-EPS).sort((a,b)=>b.x-a.x)[0];
-        const right=arr.filter(p=>p.x>x+EPS).sort((a,b)=>a.x-b.x)[0];
-        if(!left||!right)continue;
+    function qArea(q,x){
+      const lo=q.a,hi=Math.min(x,q.b); if(hi<=lo+EPS)return 0;
+      const m=(q.q1-q.q0)/(q.b-q.a);
+      const z=hi-lo;
+      return q.q0*z+m*z*z/2;
+    }
+    function leftV(x,strict){
+      let v=0;
+      reactions.forEach(r=>{if(strict?r.x<x-EPS:r.x<=x+EPS)v+=r.v});
+      points.forEach(p=>{if(strict?p.x<x-EPS:p.x<=x+EPS)v+=p.v});
+      udls.forEach(q=>{v+=qArea(q,strict?x-EPS:x)});
+      return Math.abs(v)<1e-10?0:v;
+    }
 
-        const first=Math.min(...same.map(o=>o.i));
-        const cleaned=arr.filter(p=>Math.abs(p.x-x)>EPS);
-        const insertAt=Math.min(first,cleaned.length);
-        cleaned.splice(insertAt,0,{x,y:left.y},{x,y:right.y});
-        arr.splice(0,arr.length,...cleaned);
+    const out=[];
+    const push=(x,y)=>out.push([+x.toFixed(9),Math.abs(y)<1e-10?0:y]);
+    for(let i=0;i<cuts.length-1;i++){
+      const a=cuts[i],b=cuts[i+1];
+      if(b-a<=EPS)continue;
+      push(a,leftV(a,false));
+      const steps=12;
+      for(let k=1;k<steps;k++){
+        const x=a+(b-a)*k/steps;
+        push(x,leftV(x,false));
       }
-      svg.dataset.series=JSON.stringify(arr.map(p=>[p.x,p.y]));
-    });
+      const vl=leftV(b,true),vr=leftV(b,false);
+      push(b,vl);
+      if(Math.abs(vl-vr)>1e-8)push(b,vr);
+    }
+    if(!out.length)push(0,leftV(0,false));
+    return out;
   }
 
-  const charts=$('#charts');
-  if(charts){
-    const observer=new MutationObserver(()=>requestAnimationFrame(patchCharts));
-    observer.observe(charts,{childList:true,subtree:true});
+  function shearLooksValid(series){
+    if(!Array.isArray(series)||series.length<2)return false;
+    return series.some(p=>finite(Array.isArray(p)?p[1]:p?.y) && Math.abs(n(Array.isArray(p)?p[1]:p.y))>EPS);
   }
 
+  function forceSfdVisible(){
+    if(typeof result==='undefined'||!result)return;
+    result.diagrams=result.diagrams||{};
+    let series=result.diagrams.shear;
+    if(!shearLooksValid(series)){
+      const rebuilt=rebuildShear();
+      if(rebuilt.length)result.diagrams.shear=rebuilt;
+    }
+
+    const card=$('#charts .chart.kind-shear');
+    const svg=card?.querySelector('svg');
+    if(!svg)return;
+    const raw=result.diagrams.shear;
+    if(!shearLooksValid(raw))return;
+
+    const s=raw.map(p=>Array.isArray(p)?{x:n(p[0]),y:n(p[1])}:{x:n(p.x),y:n(p.y)})
+      .filter(p=>finite(p.x)&&finite(p.y));
+    if(s.length<2)return;
+
+    const w=1100,h=330,pad=56,L=Math.max(typeof len==='function'?len():n(svg.dataset.len),1);
+    const ys=s.map(p=>p.y),r=Math.max(Math.abs(Math.min(...ys)),Math.abs(Math.max(...ys)),1e-9);
+    const min=Math.min(0,Math.min(...ys)-r*.06),max=Math.max(0,Math.max(...ys)+r*.06);
+    const sx=x=>pad+(x/L)*(w-2*pad), sy=y=>h-pad-(y-min)/(max-min||1)*(h-2*pad);
+    let d='M '+sx(s[0].x).toFixed(1)+' '+sy(s[0].y).toFixed(1);
+    for(let i=1;i<s.length;i++)d+=' L '+sx(s[i].x).toFixed(1)+' '+sy(s[i].y).toFixed(1);
+    let area=`M ${sx(s[0].x)} ${sy(0)} L `+s.map(p=>`${sx(p.x)} ${sy(p.y)}`).join(' L ')+` L ${sx(s[s.length-1].x)} ${sy(0)} Z`;
+
+    svg.dataset.series=JSON.stringify(s.map(p=>[p.x,p.y]));
+    svg.dataset.min=String(min);svg.dataset.max=String(max);svg.dataset.len=String(L);
+    const line=svg.querySelector('.chartLine'), fill=svg.querySelector('.chartArea');
+    if(line){line.setAttribute('d',d);line.setAttribute('stroke','#3b8cff');line.setAttribute('stroke-width','3');line.setAttribute('opacity','1');}
+    if(fill){fill.setAttribute('d',area);fill.setAttribute('fill','#3b8cff');fill.setAttribute('opacity','.12');}
+  }
+
+  const baseResults=window.renderResults;
+  window.renderResults=function(){
+    if(typeof result!=='undefined'&&result){
+      result.diagrams=result.diagrams||{};
+      if(!shearLooksValid(result.diagrams.shear)){
+        const s=rebuildShear();
+        if(s.length)result.diagrams.shear=s;
+      }
+    }
+    if(typeof baseResults==='function')baseResults();
+    requestAnimationFrame(forceSfdVisible);
+  };
+
+  /* Make the load table stable even if an older patch re-renders it. */
   const style=document.createElement('style');
   style.textContent=`
-    #loadRows input[data-final-angle]{min-width:72px}
-    #beamCanvas .internalHingeSymbol{fill:var(--card,#fff);stroke:currentColor;stroke-width:2}
+    #loadRows td,#loadRows th{vertical-align:middle}
+    #loadRows input,#loadRows select{min-width:0;width:100%;}
+    #loadRows th:nth-child(1),#loadRows td:nth-child(1){width:42px}
+    #loadRows th:nth-child(2),#loadRows td:nth-child(2){width:112px}
+    #loadRows th:nth-child(3),#loadRows td:nth-child(3){width:110px}
+    #loadRows th:nth-child(4),#loadRows td:nth-child(4){width:125px}
+    #loadRows th:nth-child(5),#loadRows td:nth-child(5){width:92px}
+    #loadRows th:nth-child(6),#loadRows td:nth-child(6){width:125px}
+    #loadRows th:nth-child(7),#loadRows td:nth-child(7){width:105px}
+    #loadRows th:nth-child(8),#loadRows td:nth-child(8){width:42px}
+    .tableDash{display:block;text-align:center;color:var(--muted)}
+    #charts .kind-shear .chartLine{visibility:visible!important;display:block!important;opacity:1!important}
   `;
   document.head.appendChild(style);
 
-  ensureModelShape();
+  ensureModel();
   setTimeout(()=>{
-    if(typeof window.renderInputs==='function')window.renderInputs();
-    if(typeof window.renderBeam==='function')window.renderBeam();
+    renderLoadTable();
+    if(typeof result!=='undefined'&&result){
+      if(typeof window.renderResults==='function')window.renderResults();
+      else forceSfdVisible();
+    }
   },0);
 })();
