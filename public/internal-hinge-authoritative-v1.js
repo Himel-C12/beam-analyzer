@@ -32,7 +32,6 @@
       const group=svg.querySelector(`g.supportDrag[data-id="${CSS.escape(id)}"]`);
       if(!group)return;
 
-      // Remove the generic support decorations that renderBeam adds after supportSvg().
       group.querySelectorAll('.supportBadge,.supportNumber,.supportText,.supportTriangle,.rollerWheel,.groundLine,.hatch,.fixedWall,.beamConnector').forEach(e=>e.remove());
 
       const hinge=group.querySelector('.internalHingeNative');
@@ -60,4 +59,8 @@
       group.appendChild(p);
     });
   };
+
+  // app.js already performed its initial render before this last script loaded.
+  // Render once now so the authoritative supportSvg is actually used immediately.
+  window.renderBeam();
 })();
