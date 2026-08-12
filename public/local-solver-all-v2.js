@@ -44,7 +44,6 @@
     const b=n(l.to),q0=n(l.value),q1=n(l.value2??l.value);
     if(!(b>a+EPS)||x<=a)return 0;
     const z=Math.min(x,b)-a, slope=(q1-q0)/(b-a);
-    // Integral from a to x of q(s)*(x-s) ds.
     return q0*z*z/2+slope*z*z*z/6;
   }
 
@@ -60,7 +59,7 @@
     const moments=(payload.loads||[]).filter(l=>l.type==='moment').map(l=>({x:n(l.from),m:n(l.value)}))
       .filter(m=>finite(m.x)&&finite(m.m));
     const udls=(payload.loads||[]).filter(l=>l.type==='udl').filter(l=>n(l.to)>n(l.from)+EPS);
-    const fixedMoments=reactions.filter(r=>r.type==='fixed').map(r=>({x:r.x,m:-r.m}));
+    const fixedMoments=reactions.filter(r=>r.type==='fixed').map(r=>({x:r.x,m:r.m}));
     const appliedMoments=[...moments,...fixedMoments];
     const cuts=[0,L,...reactions.map(r=>r.x),...points.map(p=>p.x),...appliedMoments.map(m=>m.x),...udls.flatMap(q=>[n(q.from),n(q.to)])]
       .filter(finite).map(x=>Math.max(0,Math.min(L,x))).sort((a,b)=>a-b).filter((x,i,a)=>i===0||!near(x,a[i-1]));
@@ -104,13 +103,13 @@
     if(!shear.length){push(shear,0,V(0,false));push(shear,L,V(L,false));}
     if(!moment.length){push(moment,0,M(0,false));push(moment,L,M(L,false));}
 
-    const stable=(arr)=>arr.map((p,i)=>({p,i})).sort((a,b)=>{
+    const stable=arr=>arr.map((p,i)=>({p,i})).sort((a,b)=>{
       const dx=a.p[0]-b.p[0];
       return Math.abs(dx)>EPS?dx:a.i-b.i;
     }).map(x=>x.p);
 
     const out={...result,diagrams:{...(result.diagrams||{}),shear:stable(shear),moment:stable(moment)}};
-    out.meta={...(result.meta||{}),diagramEngine:'BeamAnalyzer-SinglePipeline-1.0'};
+    out.meta={...(result.meta||{}),diagramEngine:'BeamAnalyzer-SinglePipeline-1.1'};
     return out;
   }
 
@@ -124,7 +123,7 @@
       if(typeof solver!=='function')return upstream(input,{...init,body:JSON.stringify(payload)});
       const result=solver(payload);
       const corrected=buildStatics(payload,result);
-      return new Response(JSON.stringify(corrected),{status:200,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Engine-Version':'BeamAnalyzer-SinglePipeline-1.0'}});
+      return new Response(JSON.stringify(corrected),{status:200,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Engine-Version':'BeamAnalyzer-SinglePipeline-1.1'}});
     }catch(error){
       console.error('Beam Analyzer single local pipeline:',error);
       return new Response(JSON.stringify({detail:error?.message||'Local beam analysis failed.'}),{status:422,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
