@@ -1,68 +1,92 @@
-/* Beam Analyzer — hard visual fix for internal hinges.
- * DOM/SVG only. Solver/model data is untouched.
+/* Beam Analyzer — authoritative internal-hinge renderer.
+ * Self-contained final visual owner. Does not modify solver/model data.
  */
-(function(){
+(function () {
   'use strict';
-  const NS='http://www.w3.org/2000/svg';
-  const root=()=>document.querySelector('#beamCanvas');
-  const num=v=>Number(v);
-  const esc=v=>CSS.escape(String(v));
+  const NS = 'http://www.w3.org/2000/svg';
+  const n = v => Number(v);
+  const finite = v => Number.isFinite(n(v));
+  const near = (a, b) => Math.abs(n(a) - n(b)) < 1e-7;
 
-  function hingeRows(){
-    return [...document.querySelectorAll('#supportRows select[data-sup][data-k="type"]')]
-      .filter(s=>s.value==='internal-hinge').map(s=>String(s.dataset.sup));
+  function hingeRows() {
+    return Array.from(document.querySelectorAll('#supportRows tr')).map(row => {
+      const select = row.querySelector('select[data-k="type"]');
+      const pos = row.querySelector('input[data-k="position"]');
+      if (!select || select.value !== 'internal-hinge' || !pos) return null;
+      const id = String(select.getAttribute('data-sup') || '');
+      const position = n(pos.value);
+      return id && finite(position) ? { id, position } : null;
+    }).filter(Boolean);
   }
 
-  function fix(){
-    const svg=root()?.querySelector('svg');
-    if(!svg)return;
-    const ids=hingeRows();
-    if(!ids.length){svg.querySelectorAll('.hardInternalHinge').forEach(e=>e.remove());return;}
+  function repair() {
+    const svg = document.querySelector('#beamCanvas svg');
+    const beam = svg && svg.querySelector('.beamLine');
+    if (!svg || !beam) return;
 
-    ids.forEach((id,index)=>{
-      const group=svg.querySelector(`g.supportDrag[data-id="${esc(id)}"]`);
-      if(!group)return;
+    const x1 = n(beam.getAttribute('x1'));
+    const x2 = n(beam.getAttribute('x2'));
+    const y = n(beam.getAttribute('y1'));
+    const total = Array.from(document.querySelectorAll('#spanRows input[data-k="length"]'))
+      .map(e => n(e.value)).filter(finite).reduce((a, b) => a + b, 0);
+    if (![x1, x2, y, total].every(finite) || total <= 0) return;
 
-      // Capture the native support's beam coordinate before removing it.
-      const oldBadge=group.querySelector('.supportBadge');
-      const x=num(oldBadge?.getAttribute('cx'));
-      const y=num(oldBadge?.getAttribute('cy'))+4;
-      if(!Number.isFinite(x)||!Number.isFinite(y))return;
+    const hinges = hingeRows();
+    const ids = new Set(hinges.map(h => h.id));
 
-      // Remove the legacy support graphic itself. No covering/overlaying.
-      group.querySelectorAll('.supportTriangle,.rollerWheel,.groundLine,.hatch,.fixedWall,.beamConnector,.supportBadge,.supportNumber,.supportText').forEach(e=>e.remove());
+    svg.querySelectorAll('g.hardInternalHinge').forEach(g => {
+      if (!ids.has(String(g.getAttribute('data-id') || ''))) g.remove();
+    });
 
-      let hinge=group.querySelector('.hardInternalHinge');
-      if(!hinge){
-        hinge=document.createElementNS(NS,'g');
-        hinge.setAttribute('class','hardInternalHinge');
-        hinge.setAttribute('pointer-events','none');
-        group.appendChild(hinge);
+    hinges.forEach((h, index) => {
+      const x = x1 + Math.max(0, Math.min(total, h.position)) / total * (x2 - x1);
+
+      // Hide/remove every native support graphic at this support. The beam line
+      // itself remains untouched, so the hinge is visibly part of the beam.
+      svg.querySelectorAll('g.supportDrag').forEach(g => {
+        if (String(g.getAttribute('data-id') || '') !== h.id) return;
+        g.querySelectorAll('.supportTriangle,.rollerWheel,.groundLine,.hatch,.fixedWall,.beamConnector,.supportBadge,.supportNumber,.supportText').forEach(e => e.remove());
+        g.style.display = 'none';
+      });
+
+      let g = svg.querySelector('g.hardInternalHinge[data-id="' + h.id.replace(/"/g, '\\"') + '"]');
+      if (!g) {
+        g = document.createElementNS(NS, 'g');
+        g.setAttribute('class', 'hardInternalHinge');
+        g.setAttribute('data-id', h.id);
+        g.setAttribute('pointer-events', 'none');
+        svg.appendChild(g);
       }
+      g.innerHTML = '';
 
-      // Idempotent: once the new symbol exists, do not mutate it on every
-      // MutationObserver pass. This prevents an observer feedback loop.
-      if(!hinge.querySelector('.hardHingeOuter')){
-        const outer=document.createElementNS(NS,'circle');
-        outer.setAttribute('class','hardHingeOuter');outer.setAttribute('cx',x);outer.setAttribute('cy',y);outer.setAttribute('r','10');
-        outer.setAttribute('fill','var(--card,#171a1f)');outer.setAttribute('stroke','currentColor');outer.setAttribute('stroke-width','2.5');
-        hinge.appendChild(outer);
-        const inner=document.createElementNS(NS,'circle');
-        inner.setAttribute('cx',x);inner.setAttribute('cy',y);inner.setAttribute('r','4.5');inner.setAttribute('fill','none');inner.setAttribute('stroke','currentColor');inner.setAttribute('stroke-width','2');
-        hinge.appendChild(inner);
-        const label=document.createElementNS(NS,'text');
-        label.setAttribute('x',x);label.setAttribute('y',y+40);label.setAttribute('text-anchor','middle');label.setAttribute('class','hardHingeLabel');
-        label.textContent=`H${index+1} (Internal Hinge)`;hinge.appendChild(label);
-        const pos=document.createElementNS(NS,'text');
-        pos.setAttribute('x',x);pos.setAttribute('y',y+56);pos.setAttribute('text-anchor','middle');pos.setAttribute('class','hardHingePos');
-        const input=document.querySelector(`#supportRows select[data-sup="${esc(id)}"]`)?.parentElement?.parentElement?.querySelector('input[data-k="position"]');
-        pos.textContent=`@ ${input?.value ?? ''} ${typeof unitText==='function'?unitText('length'):''}`.trim();hinge.appendChild(pos);
-      }
+      const outer = document.createElementNS(NS, 'circle');
+      outer.setAttribute('cx', x); outer.setAttribute('cy', y); outer.setAttribute('r', 10);
+      outer.setAttribute('fill', 'var(--card, #171a1f)');
+      outer.setAttribute('stroke', 'currentColor'); outer.setAttribute('stroke-width', 2.5);
+      g.appendChild(outer);
+
+      const inner = document.createElementNS(NS, 'circle');
+      inner.setAttribute('cx', x); inner.setAttribute('cy', y); inner.setAttribute('r', 4);
+      inner.setAttribute('fill', 'none'); inner.setAttribute('stroke', 'currentColor'); inner.setAttribute('stroke-width', 2);
+      g.appendChild(inner);
+
+      const label = document.createElementNS(NS, 'text');
+      label.setAttribute('x', x); label.setAttribute('y', y + 43); label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('class', 'supportText'); label.textContent = 'H' + (index + 1) + ' (Internal Hinge)';
+      g.appendChild(label);
+
+      const pos = document.createElementNS(NS, 'text');
+      pos.setAttribute('x', x); pos.setAttribute('y', y + 59); pos.setAttribute('text-anchor', 'middle');
+      pos.setAttribute('class', 'dimText'); pos.textContent = '@ ' + h.position + ' m';
+      g.appendChild(pos);
     });
   }
 
-  const run=()=>{try{fix()}catch(e){console.warn('Internal hinge hardfix:',e)}};
-  const canvas=root();if(canvas)new MutationObserver(run).observe(canvas,{childList:true,subtree:true});
-  const rows=document.querySelector('#supportRows');if(rows)new MutationObserver(run).observe(rows,{childList:true,subtree:true,attributes:true});
-  run();[50,150,300,600,1000,2000,4000].forEach(ms=>setTimeout(run,ms));
+  const safe = () => { try { repair(); } catch (e) { console.warn('Internal hinge hardfix:', e); } };
+  [0, 100, 300, 600, 1000, 2000].forEach(t => setTimeout(safe, t));
+  setInterval(safe, 250);
+  const canvas = document.querySelector('#beamCanvas');
+  if (canvas) new MutationObserver(safe).observe(canvas, { childList: true, subtree: true });
+  const rows = document.querySelector('#supportRows');
+  if (rows) new MutationObserver(safe).observe(rows, { childList: true, subtree: true, attributes: true });
 })();
