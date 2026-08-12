@@ -11,8 +11,7 @@
   const num = v => Number(v);
 
   function hingeRows() {
-    const rows = $$('#supportRows tr');
-    return rows.map(row => {
+    return $$('#supportRows tr').map(row => {
       const select = $('select[data-k="type"]', row);
       const pos = $('input[data-k="position"]', row);
       if (!select || select.value !== 'internal-hinge') return null;
@@ -43,9 +42,11 @@
 
   function renderOne(svg, hinge, index, geo) {
     const x = geo.x1 + (hinge.position / geo.total) * (geo.x2 - geo.x1);
+    const groups = $$(`g.supportDrag[data-id="${CSS.escape(hinge.id)}"]`, svg);
 
-    // Remove every competing hinge/support visual at this exact support id.
-    $$(`g.supportDrag[data-id="${CSS.escape(hinge.id)}"]`, svg).forEach(g => {
+    groups.forEach(g => {
+      // Keep the existing supportDrag group so its drag behaviour survives,
+      // but completely replace the native pin/roller/fixed artwork.
       g.innerHTML = '';
       g.classList.add('final-internal-hinge');
       g.setAttribute('data-internal-hinge', 'true');
@@ -78,7 +79,7 @@
       addDragHandler(g, hinge.id);
     });
 
-    // Remove any old standalone hinge patch for this id.
+    // Remove older standalone hinge implementations.
     $$(`g.finalInternalHinge[data-id="${CSS.escape(hinge.id)}"]`, svg).forEach(g => g.remove());
     $$('.canonical-internal-hinge', svg).forEach(g => g.remove());
   }
@@ -86,11 +87,21 @@
   function ensureOption() {
     $$('#supportRows tr').forEach(row => {
       const select = $('select[data-k="type"]', row);
-      if (!select || select.querySelector('option[value="internal-hinge"]')) return;
-      const option = document.createElement('option');
-      option.value = 'internal-hinge';
-      option.textContent = 'Internal Hinge';
-      select.appendChild(option);
+      if (!select) return;
+
+      if (!select.querySelector('option[value="internal-hinge"]')) {
+        const option = document.createElement('option');
+        option.value = 'internal-hinge';
+        option.textContent = 'Internal Hinge';
+        select.appendChild(option);
+      }
+
+      // app.js does not know the custom type, so explicitly restore the
+      // model's selected value after every base-render.
+      if (typeof model !== 'undefined' && Array.isArray(model.supports)) {
+        const support = model.supports.find(s => String(s.id) === String(select.dataset.sup));
+        if (support?.type === 'internal-hinge') select.value = 'internal-hinge';
+      }
     });
   }
 
@@ -102,7 +113,6 @@
     if (!geo) return;
     const hinges = hingeRows();
 
-    // If the model has no internal hinges, clean up leftovers.
     if (!hinges.length) {
       $$('.finalInternalHinge,.canonical-internal-hinge', svg).forEach(g => g.remove());
       return;
@@ -120,23 +130,9 @@
   `;
   document.head.appendChild(style);
 
-  // Run after the base renderer and after every model redraw. The short
-  // polling window is intentional: several legacy UI patches redraw the SVG
-  // asynchronously, so this last renderer must win that race.
-  let last = '';
-  function tick() {
-    const svg = $('#beamCanvas svg');
-    const key = svg ? svg.innerHTML.length + '|' + hingeRows().map(h => `${h.id}:${h.position}`).join(',') : '';
-    if (key !== last) {
-      last = key;
-      repair();
-    }
-  }
-
-  const canvas = $('#beamCanvas');
-  if (canvas) new MutationObserver(() => setTimeout(repair, 0))
-    .observe(canvas, { childList: true, subtree: true });
-
+  // A short polling loop is intentional. Several older UI patches redraw the
+  // SVG asynchronously; this renderer must win that race without observing
+  // its own DOM mutations and causing an infinite mutation loop.
   [0, 100, 300, 700, 1200, 2000].forEach(t => setTimeout(repair, t));
-  setInterval(tick, 250);
+  setInterval(repair, 300);
 })();
