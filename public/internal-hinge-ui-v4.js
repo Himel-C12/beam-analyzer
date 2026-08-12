@@ -1,0 +1,113 @@
+/* Beam Analyzer — authoritative internal-hinge renderer v4.
+ *
+ * The old support renderer treats every unknown support type as a PIN.
+ * This file deliberately suppresses that entire native support group for
+ * internal hinges and draws a completely independent hinge graphic.
+ * Solver/model data is untouched.
+ */
+(function(){
+  'use strict';
+  const NS='http://www.w3.org/2000/svg';
+  const $=s=>document.querySelector(s);
+  const num=v=>Number(v);
+  const near=(a,b,t=1.5)=>Number.isFinite(num(a))&&Math.abs(num(a)-num(b))<=t;
+
+  // Permanently suppress the legacy support graphics once a support is known
+  // to be an internal hinge. This prevents the old triangle from flashing or
+  // returning after any beam redraw.
+  const style=document.createElement('style');
+  style.textContent='.beamCanvas g.internal-hinge-native-suppressed > *{display:none !important}.beamCanvas g.finalInternalHingeV4{display:inline !important}';
+  document.head.appendChild(style);
+
+  function getModel(){return window.model&&Array.isArray(window.model.supports)?window.model:null;}
+  function geometry(svg){
+    const beam=svg?.querySelector('.beamLine');
+    if(!beam)return null;
+    const x1=num(beam.getAttribute('x1')),x2=num(beam.getAttribute('x2')),y=num(beam.getAttribute('y1'));
+    const L=typeof window.len==='function'?num(window.len()):0;
+    return [x1,x2,y,L].every(Number.isFinite)&&L>0?{x1,x2,y,L}:null;
+  }
+  function hingeX(g,p){return g.x1+(Math.max(0,Math.min(g.L,num(p)))/g.L)*(g.x2-g.x1);}
+
+  function suppressNative(svg,s,x){
+    svg.querySelectorAll('g.supportDrag,g.supportGroup,g[data-support-id],g[data-id]').forEach(g=>{
+      const id=g.getAttribute('data-id');
+      const badge=g.querySelector('.supportBadge');
+      const bx=badge?.getAttribute('cx');
+      const gx=g.getAttribute('data-x')??g.getAttribute('cx');
+      if(String(id)===String(s.id)||(Number.isFinite(num(bx))&&near(bx,x))||(Number.isFinite(num(gx))&&near(gx,x)))
+        g.classList.add('internal-hinge-native-suppressed');
+    });
+    // Old patches sometimes created loose support labels/badges outside the group.
+    svg.querySelectorAll('.supportBadge').forEach(e=>{if(near(e.getAttribute('cx'),x))e.style.display='none';});
+    svg.querySelectorAll('text.supportText').forEach(e=>{if(near(e.getAttribute('x'),x))e.style.display='none';});
+  }
+
+  function draw(svg,x,y,i,p){
+    const g=document.createElementNS(NS,'g');
+    g.setAttribute('class','finalInternalHingeV4');
+    g.setAttribute('pointer-events','none');
+    g.setAttribute('aria-label',`Internal Hinge H${i}`);
+
+    // Distinct release symbol: two concentric rings, deliberately unlike the
+    // triangular pin-support symbol used by the legacy renderer.
+    const outer=document.createElementNS(NS,'circle');
+    outer.setAttribute('cx',x);outer.setAttribute('cy',y);outer.setAttribute('r','10');
+    outer.setAttribute('fill','#171a1f');outer.setAttribute('stroke','#35d58a');outer.setAttribute('stroke-width','2.6');
+    g.appendChild(outer);
+    const inner=document.createElementNS(NS,'circle');
+    inner.setAttribute('cx',x);inner.setAttribute('cy',y);inner.setAttribute('r','5');
+    inner.setAttribute('fill','none');inner.setAttribute('stroke','#35d58a');inner.setAttribute('stroke-width','2');
+    g.appendChild(inner);
+
+    const title=document.createElementNS(NS,'text');
+    title.setAttribute('x',x);title.setAttribute('y',y-28);title.setAttribute('text-anchor','middle');
+    title.setAttribute('fill','#35d58a');title.setAttribute('font-size','13');title.setAttribute('font-weight','700');
+    title.textContent='Internal Hinge';g.appendChild(title);
+
+    const id=document.createElementNS(NS,'text');
+    id.setAttribute('x',x);id.setAttribute('y',y+39);id.setAttribute('text-anchor','middle');
+    id.setAttribute('fill','#f5f7fa');id.setAttribute('font-size','13');id.setAttribute('font-weight','600');
+    id.textContent=`H${i}`;g.appendChild(id);
+
+    const pos=document.createElementNS(NS,'text');
+    pos.setAttribute('x',x);pos.setAttribute('y',y+55);pos.setAttribute('text-anchor','middle');
+    pos.setAttribute('fill','#9da7b3');pos.setAttribute('font-size','11');
+    const unit=typeof window.unitText==='function'?window.unitText('length'):'';
+    const val=typeof window.fmt==='function'?window.fmt(p):p;
+    pos.textContent=`@ ${val} ${unit}`.trim();g.appendChild(pos);
+    svg.appendChild(g);
+  }
+
+  function repair(){
+    const m=getModel(),svg=$('#beamCanvas svg'),geo=geometry(svg);
+    if(!m||!svg||!geo)return;
+    svg.querySelectorAll('.finalInternalHingeV4').forEach(e=>e.remove());
+    const hinges=m.supports.filter(s=>s&&s.type==='internal-hinge'&&Number.isFinite(num(s.position))).sort((a,b)=>num(a.position)-num(b.position));
+    hinges.forEach((s,i)=>{
+      const x=hingeX(geo,s.position);
+      suppressNative(svg,s,x);
+      draw(svg,x,geo.y,i+1,num(s.position));
+    });
+
+    // Replace the dimension marker generated by the legacy renderer: S# -> H#.
+    hinges.forEach((s,i)=>{
+      const x=hingeX(geo,s.position);
+      svg.querySelectorAll('text.dimText').forEach(t=>{
+        if(near(t.getAttribute('x'),x)){
+          const text=(t.textContent||'').trim();
+          if(/^S\d+\s*:/.test(text))t.textContent=text.replace(/^S\d+\s*:/,`H${i+1} :`);
+        }
+      });
+    });
+  }
+
+  let queued=false;
+  function schedule(){if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;repair();});}
+  const canvas=$('#beamCanvas');
+  if(canvas)new MutationObserver(schedule).observe(canvas,{childList:true,subtree:true});
+  const rows=$('#supportRows');
+  if(rows)new MutationObserver(schedule).observe(rows,{childList:true,subtree:true});
+  schedule();
+  setTimeout(repair,100);setTimeout(repair,300);setTimeout(repair,700);setTimeout(repair,1500);
+})();
