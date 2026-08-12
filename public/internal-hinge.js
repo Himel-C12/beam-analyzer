@@ -42,7 +42,7 @@
       const id=sel.dataset.sup;
       if(sel.value!=="internal-hinge")return;
       const g=svg.querySelector(`g.supportDrag[data-id=\"${CSS.escape(String(id))}\"]`);
-      if(!g)return;
+      if(!g||g.getAttribute("data-internal-hinge")==="true")return;
       const badge=g.querySelector(".supportBadge");
       const x=Number(badge?.getAttribute("cx"));
       if(!Number.isFinite(x))return;
